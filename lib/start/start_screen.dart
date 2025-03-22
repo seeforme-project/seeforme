@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'volunteer_signup.dart';
+import '../loginsignup/volunteer_signup.dart';
 import '../globals/theme.dart';
 
 class StartScreen extends StatelessWidget {
