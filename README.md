@@ -29,7 +29,7 @@ This project follows a microservice architecture with:
 
 | Repository | Purpose | Tech Stack |
 |------------|---------|------------|
-| [seeforme](https://github.com/mujtaba-io/seeforme) | Mobile Application | Flutter, Dart |
+| [seeforme](https://github.com/mujtaba-io/seeforme) | Mobile Application | React Native |
 | [seeforme-backend](https://github.com/mujtaba-io/seeforme-backend) | API & Authentication | Django, DRF |
 
 
