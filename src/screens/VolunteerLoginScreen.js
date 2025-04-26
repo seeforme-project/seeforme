@@ -4,6 +4,7 @@ import { TextInput, Button } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { BASE_URL } from "../../Config";
+import { sendTokenToBackend } from "../NotificationService/NotificationService";
 
 const LightThemeColors = {
   background: "#F9FAFB", // Off-white background
@@ -69,6 +70,35 @@ export default function VolunteerLoginScreen({ navigation }) {
       await AsyncStorage.setItem("access_token", data.access_token);
       await AsyncStorage.setItem("refresh_token", data.refresh_token);
       await AsyncStorage.setItem("user_data", JSON.stringify(data.user));
+
+
+
+
+
+
+
+
+
+
+
+       // Send notifications-token to Django backend
+       try {
+        const projectId = "3c8f8dec-9498-4aae-8184-174d42a6112b"; // from app.json
+        await sendTokenToBackend(projectId);
+        console.log('Token successfully registered with backend');
+      } catch (error) {
+        console.error('Failed to register token with backend:', error);
+      }
+
+
+
+
+
+
+
+
+
+
 
       // Navigate to success page
       navigation.navigate("VolunteerHome");

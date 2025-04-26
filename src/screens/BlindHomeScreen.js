@@ -1,7 +1,12 @@
 import React, { useRef, useEffect, useState } from "react";
 import { View, StyleSheet, Text, StatusBar, Animated, Easing } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { GestureHandlerRootView, PanGestureHandler, State } from "react-native-gesture-handler";
+import { GestureHandlerRootView, TapGestureHandler, State } from "react-native-gesture-handler";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { api } from '../../Config';
+
+
 
 export default function BlindHomeScreen({ navigation }) {
   // Animation value for scaling the microphone
@@ -9,9 +14,68 @@ export default function BlindHomeScreen({ navigation }) {
   // Animation value for opacity pulse
   const opacityAnim = useRef(new Animated.Value(0.6)).current;
   
-  // State to track swipe-down gestures
-  const [lastSwipeTime, setLastSwipeTime] = useState(0);
-  const [swipeCount, setSwipeCount] = useState(0);
+  // State to track double tap
+  const doubleTapRef = useRef(null);
+  const [lastTapTime, setLastTapTime] = useState(0);
+
+
+
+
+
+
+
+
+
+// send notification to user_id 1 on double tap to screen
+function foo(){
+  const testNotificationToUser = async () => {
+    try {
+      const response = await api.post('/api/send-push-notification/', {
+        user_id: 1,
+        title: 'Test Notification',
+        message: `Test notification sent by mujtaba-io at ${new Date().toISOString()}`,
+        data: {
+          timestamp: new Date().toISOString(),
+          sender: 'mujtaba-io'
+        }
+      });
+  
+      console.log('Notification sent:', response.data);
+      return response.data;
+    } catch (error) {
+      // Enhanced error logging for better debugging
+      console.error('Failed to send notification:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      throw error;
+    }
+  };
+  
+  // Call the function to send a test notification
+  testNotificationToUser()
+    .then(result => {
+      console.log('Notification sent successfully:', result);
+    })
+    .catch(error => {
+      console.error('Error sending notification:', error);
+    });
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   useEffect(() => {
     // Create scaling animation
@@ -58,50 +122,26 @@ export default function BlindHomeScreen({ navigation }) {
     };
   }, []);
 
-  // Separate function to handle double swipe-down detection
-  const handleDoubleSwipeDown = () => {
-    const currentTime = new Date().getTime();
-    
-    // Reset count if the time between swipes is more than 1 second
-    if (currentTime - lastSwipeTime > 1000) {
-      setSwipeCount(1); // Reset to 1 (counting this swipe)
-    } else {
-      // Increment the swipe count
-      const newCount = swipeCount + 1;
-      setSwipeCount(newCount);
-      
-      // Check if we've reached 2 swipes
-      if (newCount >= 2) {
-        // Navigate back
-        navigation.goBack();
-        // Reset the counter
-        setSwipeCount(0);
+  const onSingleTapEvent = ({ nativeEvent }) => {
+    if (nativeEvent.state === State.ACTIVE) {
+      const now = Date.now();
+      const DOUBLE_TAP_DELAY = 300; // 300ms between taps
+
+      if (now - lastTapTime < DOUBLE_TAP_DELAY) {
+        // Double tap detected
+        foo(); // Call the foo() function
       }
+      
+      setLastTapTime(now);
     }
-    
-    // Update the last swipe time
-    setLastSwipeTime(currentTime);
   };
 
-  // Handle the gesture event
-  const onGestureEvent = (event) => {
-    // Check if it's a swipe down (positive y translation)
-    if (event.nativeEvent.translationY > 50) {
-      handleDoubleSwipeDown();
-    }
-  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <PanGestureHandler
-        onHandlerStateChange={({ nativeEvent }) => {
-          if (nativeEvent.state === State.END) {
-            // Only process completed gestures
-            if (nativeEvent.translationY > 50) {
-              handleDoubleSwipeDown();
-            }
-          }
-        }}
+      <TapGestureHandler
+        onHandlerStateChange={onSingleTapEvent}
+        ref={doubleTapRef}
       >
         <View style={styles.container}>
           <StatusBar backgroundColor="#000000" barStyle="light-content" />
@@ -125,11 +165,10 @@ export default function BlindHomeScreen({ navigation }) {
           </View>
           
           <Text style={styles.exitText}>
-            To exit, swipe-down two times.
-            {swipeCount === 1 ? " (1 swipe detected)" : ""}
+            Double tap anywhere on the screen.
           </Text>
         </View>
-      </PanGestureHandler>
+      </TapGestureHandler>
     </GestureHandlerRootView>
   );
 }

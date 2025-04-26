@@ -3,6 +3,9 @@ import { View, StyleSheet, Text, TouchableOpacity, ScrollView, StatusBar } from 
 import { Appbar, Button, Card, IconButton } from "react-native-paper";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { BASE_URL, api } from "../../Config";
+
 const LightThemeColors = {
   background: "#F9FAFB", // Off-white background
   card: "#FFFFFF", // White for card-like UI elements
@@ -55,9 +58,31 @@ export default function VolunteerHomeScreen({ navigation }) {
     },
   ];
 
+
+
+
+
+
+
+
+
+
+
   const toggleAvailability = () => {
     setIsAvailable(!isAvailable);
-  };
+  }
+
+
+
+
+
+
+
+
+
+
+
+
 
   return (
     <View style={styles.container}>
