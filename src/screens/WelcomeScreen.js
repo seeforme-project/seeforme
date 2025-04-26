@@ -15,7 +15,7 @@ const WelcomeScreen = ({ navigation }) => {
       {/* Buttons */}
       <TouchableOpacity
         style={styles.volunteerButton}
-        onPress={() => navigation.navigate("Login")} // Navigate to Login page directly now
+        onPress={() => navigation.navigate("VolunteerLogin")} // Navigate to Login page directly now
       >
         <Icon name="handshake" size={20} color="#FFFFFF" />
         <Text style={styles.buttonText}>I am Volunteer</Text>
@@ -34,9 +34,8 @@ const WelcomeScreen = ({ navigation }) => {
       <TouchableOpacity
         style={styles.blindButton}
         onPress={() => {
-          // Voice command would be handled here in a real app
-          // For now, just navigate to the login screen
-          navigation.navigate("Login");
+          // ALSO LISTEN TO VOICE COMMAND AS WELL.
+          navigation.navigate("BlindLogin");
         }}
       >
         <Icon name="microphone" size={20} color="#5E60CE" />
@@ -44,13 +43,7 @@ const WelcomeScreen = ({ navigation }) => {
       </TouchableOpacity>
 
       {/* Login Button */}
-      <TouchableOpacity
-        style={styles.loginButton}
-        onPress={() => navigation.navigate("Login")}
-      >
-        <Icon name="login" size={18} color="#5E60CE" />
-        <Text style={styles.loginText}>Already have an account? Log in</Text>
-      </TouchableOpacity>
+      
 
       {/* Footer Text */}
       <Text style={styles.footerText}>Begin your journey</Text>

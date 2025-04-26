@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { View, StyleSheet, Text, TouchableOpacity } from "react-native";
 import { TextInput, Button } from "react-native-paper";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { BASE_URL } from "../../Config";
 
 const LightThemeColors = {
   background: "#F9FAFB", // Off-white background
@@ -12,16 +15,17 @@ const LightThemeColors = {
   error: "#DC2626", // Red for errors
 };
 
-export default function LoginScreen({ navigation }) {
-  const [username, setUsername] = useState("");
+export default function BlindLoginScreen({ navigation }) {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     // Basic validation
-    if (!username) {
-      setErrorMessage("Username is required");
+    if (!email) {
+      setErrorMessage("Email is required");
       return;
     }
 
@@ -32,9 +36,48 @@ export default function LoginScreen({ navigation }) {
 
     // Reset errors
     setErrorMessage("");
+    setIsLoading(true);
 
-    // Proceed with login - navigate to success page
-    navigation.navigate("SuccessPage");
+    try {
+      // Call API endpoint
+      const response = await fetch( BASE_URL + "/api/login/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Handle error responses
+        setErrorMessage(data.error || "Login failed. Please try again.");
+        return;
+      }
+
+    // Check if account_type is 'blind'
+    if (data.user && data.user.account_type !== 'blind') {
+        setErrorMessage(`Cannot continue as a blind. Your account type is '${data.user.account_type}'.`);
+        return;
+      }
+
+      // Store tokens in AsyncStorage
+      await AsyncStorage.setItem("access_token", data.access_token);
+      await AsyncStorage.setItem("refresh_token", data.refresh_token);
+      await AsyncStorage.setItem("user_data", JSON.stringify(data.user));
+
+      // Navigate to success page
+      navigation.navigate("BlindHome");
+    } catch (error) {
+      console.error("Login error:", error);
+      setErrorMessage("Network error. Please check your connection.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -46,19 +89,21 @@ export default function LoginScreen({ navigation }) {
       </View>
 
       <View style={styles.formContainer}>
-        <Text style={styles.formTitle}>Login</Text>
+        <Text style={styles.formTitle}>Blind Login</Text>
 
         <TextInput
-          label="Username"
+          label="Email"
           mode="outlined"
-          value={username}
+          value={email}
           onChangeText={(text) => {
-            setUsername(text);
+            setEmail(text);
             setErrorMessage("");
           }}
           style={styles.input}
           outlineColor={LightThemeColors.border}
           activeOutlineColor={LightThemeColors.primary}
+          keyboardType="email-address"
+          autoCapitalize="none"
         />
 
         <TextInput
@@ -96,6 +141,8 @@ export default function LoginScreen({ navigation }) {
           style={styles.loginButton}
           buttonColor={LightThemeColors.primary}
           labelStyle={{ color: LightThemeColors.card }}
+          loading={isLoading}
+          disabled={isLoading}
         >
           Login
         </Button>
@@ -108,7 +155,7 @@ export default function LoginScreen({ navigation }) {
 
         <Button
           mode="outlined"
-          onPress={() => navigation.navigate("VolunteerSignUp")}
+          onPress={() => navigation.navigate("BlindSignUp")}
           style={styles.signupButton}
           labelStyle={{ color: LightThemeColors.primary }}
         >

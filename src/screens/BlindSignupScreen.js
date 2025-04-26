@@ -26,7 +26,7 @@ const LightThemeColors = {
   infoBackground: "#F8F9FA", // Slightly darker off-white for info box
 };
 
-export default function VolunteerSignupScreen({ navigation }) {
+export default function BlindSignupScreen({ navigation }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -80,7 +80,7 @@ export default function VolunteerSignupScreen({ navigation }) {
           name,
           email,
           password,
-          account_type: "volunteer",
+          account_type: "blind",
         }),
       });
 
@@ -104,7 +104,7 @@ export default function VolunteerSignupScreen({ navigation }) {
         [
           {
             text: "OK",
-            onPress: () => navigation.navigate("VolunteerLogin"),
+            onPress: () => navigation.navigate("BlindLogin"),
           },
         ]
       );
@@ -285,7 +285,7 @@ export default function VolunteerSignupScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Create Volunteer Account</Text>
+      <Text style={styles.header}>Create Blind Account</Text>
       {renderStepIndicator()}
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {renderStepContent()}
