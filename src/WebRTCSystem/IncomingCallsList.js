@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 
-const IncomingCallsList = ({ webRTCSystem, onCallAccepted }) => {
+const IncomingCallsList = ({ webRTCSystem }) => {
   const [incomingCalls, setIncomingCalls] = useState([]);
 
   useEffect(() => {
@@ -24,8 +24,8 @@ const IncomingCallsList = ({ webRTCSystem, onCallAccepted }) => {
   const handleAcceptCall = async (callId, offer) => {
     try {
       const success = await webRTCSystem.answerCall(callId, offer);
-      if (success && onCallAccepted) {
-        onCallAccepted();
+      if (success) {
+        navigation.navigate('VideoCall');
       }
     } catch (error) {
       console.error('Failed to answer call:', error);

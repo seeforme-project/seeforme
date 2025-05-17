@@ -1,5 +1,6 @@
 
-export const BASE_URL = "http://192.168.149.98:8000";
+export const BASE_URL = "http://192.168.40.78:8000";
+export const SIGNALING_SERVER_URL = 'ws://192.168.40.78:50001';
 
 
 

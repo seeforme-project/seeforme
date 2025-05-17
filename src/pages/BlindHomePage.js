@@ -8,14 +8,25 @@ import {
 } from "react-native-gesture-handler";
 import { runOnJS } from 'react-native-reanimated';
 
+
+import { defaultWebRTCSystem } from '../WebRTCSystem/WebRTCSystem';
+
+
 export default function BlindHomePage({ navigation }) {
   // Helper functions to be called from worklets
   const showAIAlert = () => {
     Alert.alert("Info", "AI not implemented");
   };
 
-  const showDoubleTapAlert = () => {
-    Alert.alert("Info", "Screen is double tapped");
+  const showDoubleTapAlert = async () => { // Start video call
+    try {
+      const success = await defaultWebRTCSystem.startCall();
+      if (success) {
+        navigation.navigate("VideoCall");
+      }
+    } catch (error) {
+      console.error('Failed to start call:', error);
+    }
   };
 
   const navigateBack = () => {

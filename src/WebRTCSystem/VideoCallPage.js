@@ -9,7 +9,11 @@ import {
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
 
-const VideoCallPage = ({ webRTCSystem, onCallEnded }) => {
+import TestClientComponent from './TestClientComponent';
+import { SIGNALING_SERVER_URL } from '../../Config';
+import { transparent } from 'react-native-paper/lib/typescript/styles/themes/v2/colors';
+
+const VideoCallPage = ({ webRTCSystem }) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -39,9 +43,7 @@ const VideoCallPage = ({ webRTCSystem, onCallEnded }) => {
     };
     
     const handleCallEnded = () => {
-      if (onCallEnded) {
-        onCallEnded();
-      }
+      navigation.goBack();
     };
     
     // Add event listeners
@@ -57,19 +59,50 @@ const VideoCallPage = ({ webRTCSystem, onCallEnded }) => {
       webRTCSystem.off('callConnected', handleCallConnected);
       webRTCSystem.off('callEnded', handleCallEnded);
     };
-  }, [webRTCSystem, onCallEnded]);
+  }, [webRTCSystem]);
 
   const handleEndCall = () => {
     webRTCSystem.endCall();
-    if (onCallEnded) {
-      onCallEnded();
-    }
+    // navigation.goBack();
   };
 
   return (
     <View style={styles.container}>
       {/* Local video stream (top half) */}
       <View style={styles.localStreamContainer}>
+
+
+
+
+
+
+
+
+
+
+      { /* Test clients container */ }
+      
+        
+        
+          <View style={styles.testClient}>
+            <TestClientComponent 
+              serverUrl={SIGNALING_SERVER_URL} 
+              clientName="Test Client 1" 
+            />
+          </View>
+       
+      
+
+
+
+
+
+
+
+
+
+
+
         {localStream ? (
           <RTCView
             streamURL={localStream.toURL()}
@@ -109,6 +142,7 @@ const VideoCallPage = ({ webRTCSystem, onCallEnded }) => {
       <TouchableOpacity style={styles.endCallButton} onPress={handleEndCall}>
         <Text style={styles.endCallButtonText}>End Call</Text>
       </TouchableOpacity>
+
     </View>
   );
 };
@@ -172,6 +206,58 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  testButton: {
+    backgroundColor: '#673AB7',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  testButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  testClientsContainer: {
+    marginTop: 20,
+    padding: 16,
+    borderTopWidth: 1,
+    borderColor: '#ddd',
+  },
+  testClientsHeader: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  clientsRow: {
+    flexDirection: 'row',
+    height: 400,
+  },
+  testClient: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    margin: 5,
   },
 });
 

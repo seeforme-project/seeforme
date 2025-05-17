@@ -9,6 +9,9 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 
 
+import { SIGNALING_SERVER_URL } from './Config';
+
+
 import WelcomePage from "./src/pages/WelcomePage";
 import VolunteerSignUpPage from "./src/pages/VolunteerSignupPage";
 import VolunteerLoginPage from "./src/pages/VolunteerLoginPage";
@@ -19,7 +22,8 @@ import VolunteerHomePage from "./src/pages/VolunteerHomePage";
 import BlindHomePage from "./src/pages/BlindHomePage";
 
 
-import WebRTCPage from './src/pages/_LocalWebRTCDemo'; // testing only tmp
+import VideoCallPage from './src/WebRTCSystem/VideoCallPage';
+import { defaultWebRTCSystem } from './src/WebRTCSystem/WebRTCSystem';
 
 
 
@@ -44,6 +48,10 @@ export default function App() {
   // Request permissions for camera and microphone
   React.useEffect(() => {
     requestPermissions();
+  }, []);
+
+  React.useEffect(() => {
+    defaultWebRTCSystem.initialize(SIGNALING_SERVER_URL);
   }, []);
 
 
@@ -78,6 +86,16 @@ export default function App() {
             name="BlindHome"
             component={BlindHomePage}
           />
+
+
+          <Stack.Screen name="VideoCall">
+            {() => (
+              <VideoCallPage
+                webRTCSystem={defaultWebRTCSystem}
+              />
+            )}
+          </Stack.Screen>
+
 
 
         </Stack.Navigator>

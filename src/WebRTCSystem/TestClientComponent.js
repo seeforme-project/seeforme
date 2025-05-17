@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import WebRTCSystem from './WebRTCSystem';
-import StartCallButton from './StartCallButton';
 import IncomingCallsList from './IncomingCallsList';
 import VideoCallPage from './VideoCallPage';
 
@@ -56,10 +55,7 @@ const TestClientComponent = ({ serverUrl, clientName }) => {
         />
       ) : (
         <ScrollView>
-          <StartCallButton 
-            webRTCSystem={webRTCSystem} 
-            onCallStarted={handleCallStarted} 
-          />
+
           <IncomingCallsList 
             webRTCSystem={webRTCSystem} 
             onCallAccepted={handleCallAccepted} 
