@@ -1,138 +1,90 @@
-import React, { useEffect, useState, useRef } from "react";
+import 'react-native-gesture-handler'; // must be at the top
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+
+
+import React from "react";
+import { StatusBar } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
-import WelcomeScreen from "./src/screens/WelcomeScreen";
-import VolunteerSignUpScreen from "./src/screens/VolunteerSignupScreen";
-import VolunteerLoginScreen from "./src/screens/VolunteerLoginScreen";
-import BlindSignUpScreen from "./src/screens/BlindSignupScreen";
-import BlindLoginScreen from "./src/screens/BlindLoginScreen";
-import SuccessPage from "./src/screens/SuccessPage";
-import VolunteerHomeScreen from "./src/screens/VolunteerHomeScreen";
-import BlindHomeScreen from "./src/screens/BlindHomeScreen";
-
-// Import required notification packages
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
 
 
+import WelcomePage from "./src/pages/WelcomePage";
+import VolunteerSignUpPage from "./src/pages/VolunteerSignupPage";
+import VolunteerLoginPage from "./src/pages/VolunteerLoginPage";
+import BlindSignUpPage from "./src/pages/BlindSignupPage";
+import BlindLoginPage from "./src/pages/BlindLoginPage";
+import SuccessPage from "./src/pages/SuccessPage";
+import VolunteerHomePage from "./src/pages/VolunteerHomePage";
+import BlindHomePage from "./src/pages/BlindHomePage";
+
+
+import WebRTCPage from './src/pages/_LocalWebRTCDemo'; // testing only tmp
 
 
 
 
-import { scheduleLocalNotification } from "./src/NotificationService/NotificationService";
+import {PermissionsAndroid, Platform} from 'react-native';
+async function requestPermissions() {
+  if (Platform.OS === 'android') {
+    await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+      PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+    ]);
+  }
+}
 
 
-// Configure how notifications appear when the app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+
+
 
 const Stack = createStackNavigator();
 
 export default function App() {
-  const [expoPushToken, setExpoPushToken] = useState('');
-  const [notification, setNotification] = useState(null);
-  const notificationListener = useRef();
-  const responseListener = useRef();
-
-  useEffect(() => {
-    // Function to register for push notifications
-    const registerForPushNotificationsAsync = async () => {
-      let token;
-      
-      if (Device.isDevice) {
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-        
-        if (existingStatus !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync();
-          finalStatus = status;
-        }
-        
-        if (finalStatus !== 'granted') {
-          console.log('Failed to get push token for push notification!');
-          return;
-        }
-        
-        // Get the Expo push token
-        token = (await Notifications.getExpoPushTokenAsync({
-          projectId: Constants.expoConfig?.extra?.eas?.projectId,
-        })).data;
-        
-        console.log('Expo Push Token:', token);
-        setExpoPushToken(token);
-        
-        // Here you would typically send this token to your backend
-        // sendTokenToBackend(token);
-      } else {
-        console.log('Must use physical device for Push Notifications');
-      }
-    };
-
-    // Register for notifications
-    registerForPushNotificationsAsync();
-
-    // Set up notification listeners
-    // This listener is called when a notification is received while the app is foregrounded
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      setNotification(notification);
-      console.log('Notification received:', notification);
-    });
-
-    // This listener is called when a user taps on or interacts with a notification
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      const { notification } = response;
-      console.log('Notification response received:', notification);
-      
-      // Handle navigation based on notification data if needed
-      // For example:
-      // const data = notification.request.content.data;
-      // if (data.screen) {
-      //   navigation.navigate(data.screen);
-      // }
-    });
-
-    // Clean up the listeners on unmount
-    return () => {
-      Notifications.removeNotificationSubscription(notificationListener.current);
-      Notifications.removeNotificationSubscription(responseListener.current);
-    };
+  // Request permissions for camera and microphone
+  React.useEffect(() => {
+    requestPermissions();
   }, []);
 
 
-
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        initialRouteName="WelcomeScreen"
-        screenOptions={{ headerShown: false }}
-      >
-        <Stack.Screen name="WelcomeScreen" component={WelcomeScreen} />
-        <Stack.Screen
-          name="VolunteerSignUp"
-          component={VolunteerSignUpScreen}
-        />
-        <Stack.Screen name="VolunteerLogin" component={VolunteerLoginScreen} />
-        <Stack.Screen
-          name="BlindSignUp"
-          component={BlindSignUpScreen}
-        />
-        <Stack.Screen name="BlindLogin" component={BlindLoginScreen} />
-        <Stack.Screen name="SuccessPage" component={SuccessPage} />
-        <Stack.Screen
-          name="VolunteerHome"
-          component={VolunteerHomeScreen}
-        />
-        <Stack.Screen
-          name="BlindHome"
-          component={BlindHomeScreen}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+      <NavigationContainer>
+
+
+
+
+        <Stack.Navigator
+          initialRouteName="WelcomePage"
+          screenOptions={{ headerShown: false }}>
+
+          <Stack.Screen name="WelcomePage" component={WelcomePage} />
+          <Stack.Screen
+            name="VolunteerSignUp"
+            component={VolunteerSignUpPage}
+          />
+          <Stack.Screen name="VolunteerLogin" component={VolunteerLoginPage} />
+          <Stack.Screen
+            name="BlindSignUp"
+            component={BlindSignUpPage}
+          />
+          <Stack.Screen name="BlindLogin" component={BlindLoginPage} />
+          <Stack.Screen name="SuccessPage" component={SuccessPage} />
+          <Stack.Screen
+            name="VolunteerHome"
+            component={VolunteerHomePage}
+          />
+          <Stack.Screen
+            name="BlindHome"
+            component={BlindHomePage}
+          />
+
+
+        </Stack.Navigator>
+
+
+
+      </NavigationContainer>
+      </GestureHandlerRootView>
   );
 }
