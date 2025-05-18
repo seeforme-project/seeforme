@@ -13,6 +13,8 @@ import { Appbar, Button, Card, IconButton } from "react-native-paper";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BASE_URL, api } from "../../Config";
+import IncomingCallsList from "../WebRTCSystem/IncomingCallsList"; // Import the new component
+import { defaultWebRTCSystem } from "../WebRTCSystem/WebRTCSystem"; // Import the actual WebRTC system
 
 const DarkThemeColors = {
   background: "#111827",
@@ -87,36 +89,8 @@ const AvailabilityToggle = ({ isAvailable, onToggle }) => {
 export default function VolunteerHomePage({ navigation }) {
   const [isAvailable, setIsAvailable] = useState(false);
   
-  const pendingCalls = [
-    {
-      id: "1",
-      userName: "John Smith",
-      timeRequested: "5 minutes ago",
-      location: "Downtown, City",
-      color: DarkThemeColors.callYellow,
-    },
-    {
-      id: "2",
-      userName: "Sarah Johnson",
-      timeRequested: "15 minutes ago",
-      location: "North Park, City",
-      color: DarkThemeColors.callGreen,
-    },
-    {
-      id: "3",
-      userName: "David Lee",
-      timeRequested: "30 minutes ago",
-      location: "West Mall, City",
-      color: DarkThemeColors.callBlue,
-    },
-    {
-      id: "4",
-      userName: "Emma Wilson",
-      timeRequested: "45 minutes ago",
-      location: "East Side, City",
-      color: DarkThemeColors.callRed,
-    },
-  ];
+  // Simply use the imported WebRTC system
+  const webRTCSystem = defaultWebRTCSystem;
 
   const toggleAvailability = () => {
     setIsAvailable(!isAvailable);
@@ -151,51 +125,8 @@ export default function VolunteerHomePage({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Pending Assistance Calls</Text>
           
-          {pendingCalls.length > 0 ? (
-            pendingCalls.map((call) => (
-              <Card 
-                key={call.id} 
-                style={[styles.callCard, { backgroundColor: call.color }]}
-                onPress={() => navigation.navigate("CallDetails", { callId: call.id })}
-              >
-                <Card.Content>
-                  <View style={styles.callCardHeader}>
-                    <Text style={styles.callUserName}>{call.userName}</Text>
-                    <Text style={styles.callTime}>{call.timeRequested}</Text>
-                  </View>
-                  <View style={styles.callDetails}>
-                    <Icon name="map-marker" size={16} color={DarkThemeColors.muted} />
-                    <Text style={styles.callLocation}>{call.location}</Text>
-                  </View>
-                </Card.Content>
-                <Card.Actions style={styles.callCardActions}>
-                  <Button 
-                    mode="contained" 
-                    style={styles.acceptButton}
-                    contentStyle={styles.buttonContent}
-                    labelStyle={styles.buttonLabel}
-                    onPress={() => console.log("Accepted call", call.id)}
-                  >
-                    Accept
-                  </Button>
-                  <Button 
-                    mode="outlined"
-                    style={styles.declineButton}
-                    contentStyle={styles.buttonContent}
-                    labelStyle={[styles.buttonLabel, { color: DarkThemeColors.muted }]}
-                    onPress={() => console.log("Declined call", call.id)}
-                  >
-                    Decline
-                  </Button>
-                </Card.Actions>
-              </Card>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Icon name="bell-off" size={50} color={DarkThemeColors.muted} />
-              <Text style={styles.emptyStateText}>No pending calls at this time</Text>
-            </View>
-          )}
+          {/* Use the IncomingCallsList component with the actual WebRTC system */}
+          <IncomingCallsList webRTCSystem={webRTCSystem} />
         </View>
         
         <View style={styles.section}>
@@ -272,74 +203,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: DarkThemeColors.text,
     marginBottom: 16,
-    letterSpacing: 0.5,
-  },
-  callCard: {
-    marginBottom: 12,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  callCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  callUserName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: DarkThemeColors.text,
-    letterSpacing: 0.5,
-  },
-  callTime: {
-    fontSize: 12,
-    color: DarkThemeColors.muted,
-    letterSpacing: 0.5,
-  },
-  callDetails: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  callLocation: {
-    fontSize: 14,
-    color: DarkThemeColors.muted,
-    marginLeft: 4,
-    letterSpacing: 0.5,
-  },
-  callCardActions: {
-    justifyContent: "flex-end",
-    paddingTop: 8,
-  },
-  acceptButton: {
-    backgroundColor: DarkThemeColors.primary,
-    marginRight: 8,
-    borderRadius: 30,
-  },
-  declineButton: {
-    borderColor: DarkThemeColors.muted,
-    borderRadius: 30,
-  },
-  buttonContent: {
-    height: 40,
-    paddingHorizontal: 16,
-  },
-  buttonLabel: {
-    color: DarkThemeColors.text,
-    fontSize: 14,
-    letterSpacing: 0.5,
-  },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-    backgroundColor: DarkThemeColors.card,
-    borderRadius: 12,
-  },
-  emptyStateText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: DarkThemeColors.muted,
-    textAlign: "center",
     letterSpacing: 0.5,
   },
   mapContainer: {

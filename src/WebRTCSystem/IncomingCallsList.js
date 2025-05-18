@@ -1,24 +1,80 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text, Animated, Easing } from 'react-native';
+import { Card, Button } from 'react-native-paper';
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { useNavigation } from '@react-navigation/native';
+
+const DarkThemeColors = {
+  background: "#111827",
+  primary: "#4F46E5",
+  text: "#F3F4F6",
+  muted: "#9CA3AF",
+  border: "#374151",
+  error: "#EF4444",
+  yellow: "#FBBF24",
+  card: "#1F2937",
+  available: "#059669",
+  unavailable: "#4B5563",
+  callYellow: "#292524",
+  callGreen: "#064E3B",
+  callBlue: "#0C4A6E",
+  callRed: "#7F1D1D",
+};
 
 const IncomingCallsList = ({ webRTCSystem }) => {
   const [incomingCalls, setIncomingCalls] = useState([]);
+  const navigation = useNavigation();
+
+  // Color rotation for incoming calls
+  const callColors = [
+    DarkThemeColors.callYellow, 
+    DarkThemeColors.callGreen, 
+    DarkThemeColors.callBlue, 
+    DarkThemeColors.callRed
+  ];
 
   useEffect(() => {
     // Set initial calls
-    setIncomingCalls([...webRTCSystem.incomingCallRequests]);
+    if (webRTCSystem?.incomingCallRequests) {
+      // Map the incoming calls to match the UI format
+      const formattedCalls = webRTCSystem.incomingCallRequests.map((call, index) => ({
+        id: call.callId,
+        callId: call.callId,
+        userName: `Caller ${call.callId.substring(0, 5)}`,
+        timeRequested: formatTimestamp(call.timestamp),
+        location: "Location unavailable",
+        color: callColors[index % callColors.length],
+        timestamp: call.timestamp,
+        offer: call.offer
+      }));
+      
+      setIncomingCalls(formattedCalls);
+    }
     
     // Subscribe to incoming call events
     const handleIncomingCall = (calls) => {
-      setIncomingCalls([...calls]);
+      const formattedCalls = calls.map((call, index) => ({
+        id: call.callId,
+        callId: call.callId,
+        userName: `Caller ${call.callId.substring(0, 5)}`,
+        timeRequested: formatTimestamp(call.timestamp),
+        location: "Location unavailable",
+        color: callColors[index % callColors.length],
+        timestamp: call.timestamp,
+        offer: call.offer
+      }));
+      
+      setIncomingCalls(formattedCalls);
     };
     
-    webRTCSystem.on('incomingCallReceived', handleIncomingCall);
-    
-    // Cleanup subscription
-    return () => {
-      webRTCSystem.off('incomingCallReceived', handleIncomingCall);
-    };
+    if (webRTCSystem) {
+      webRTCSystem.on('incomingCallReceived', handleIncomingCall);
+      
+      // Cleanup subscription
+      return () => {
+        webRTCSystem.off('incomingCallReceived', handleIncomingCall);
+      };
+    }
   }, [webRTCSystem]);
 
   const handleAcceptCall = async (callId, offer) => {
@@ -33,105 +89,140 @@ const IncomingCallsList = ({ webRTCSystem }) => {
   };
 
   const formatTimestamp = (timestamp) => {
+    const now = new Date();
     const date = new Date(timestamp);
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const seconds = date.getSeconds().toString().padStart(2, '0');
-    return `${date.getHours()}:${minutes}:${seconds}`;
+    const diffMinutes = Math.floor((now - date) / (1000 * 60));
+    
+    if (diffMinutes < 1) return "Just now";
+    if (diffMinutes === 1) return "1 minute ago";
+    if (diffMinutes < 60) return `${diffMinutes} minutes ago`;
+    
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours === 1) return "1 hour ago";
+    return `${diffHours} hours ago`;
   };
 
   if (incomingCalls.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>No incoming calls</Text>
+      <View style={styles.emptyState}>
+        <Icon name="bell-off" size={50} color={DarkThemeColors.muted} />
+        <Text style={styles.emptyStateText}>No incoming calls at this time</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Incoming Calls</Text>
-      <FlatList
-        data={incomingCalls}
-        keyExtractor={(item) => item.callId}
-        renderItem={({ item }) => (
-          <View style={styles.callItem}>
-            <View style={styles.callInfo}>
-              <Text style={styles.callId}>Call ID: {item.callId}</Text>
-              <Text style={styles.timestamp}>
-                Received at {formatTimestamp(item.timestamp)}
-              </Text>
+    <View>
+      {incomingCalls.map((call) => (
+        <Card 
+          key={call.id} 
+          style={[styles.callCard, { backgroundColor: call.color }]}
+          onPress={() => console.log("Call details", call.id)}
+        >
+          <Card.Content>
+            <View style={styles.callCardHeader}>
+              <Text style={styles.callUserName}>{call.userName}</Text>
+              <Text style={styles.callTime}>{call.timeRequested}</Text>
             </View>
-            <TouchableOpacity
+            <View style={styles.callDetails}>
+              <Icon name="phone-incoming" size={16} color={DarkThemeColors.muted} />
+              <Text style={styles.callLocation}>Call ID: {call.callId}</Text>
+            </View>
+          </Card.Content>
+          <Card.Actions style={styles.callCardActions}>
+            <Button 
+              mode="contained" 
               style={styles.acceptButton}
-              onPress={() => handleAcceptCall(item.callId, item.offer)}
+              contentStyle={styles.buttonContent}
+              labelStyle={styles.buttonLabel}
+              onPress={() => handleAcceptCall(call.callId, call.offer)}
             >
-              <Text style={styles.acceptButtonText}>Accept</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      />
+              Accept
+            </Button>
+            <Button 
+              mode="outlined"
+              style={styles.declineButton}
+              contentStyle={styles.buttonContent}
+              labelStyle={[styles.buttonLabel, { color: DarkThemeColors.muted }]}
+              onPress={() => console.log("Declined call", call.id)}
+            >
+              Decline
+            </Button>
+          </Card.Actions>
+        </Card>
+      ))}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    margin: 10,
-    backgroundColor: '#f9f9f9',
+  callCard: {
+    marginBottom: 12,
+    borderRadius: 12,
+    elevation: 2,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
+  callCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
   },
-  emptyContainer: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 15,
-    margin: 10,
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
+  callUserName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: DarkThemeColors.text,
+    letterSpacing: 0.5,
   },
-  emptyText: {
-    color: '#888',
-    fontStyle: 'italic',
-  },
-  callItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 5,
-    marginVertical: 5,
-    backgroundColor: '#fff',
-  },
-  callInfo: {
-    flex: 1,
-  },
-  callId: {
-    fontWeight: '500',
-  },
-  timestamp: {
-    color: '#666',
+  callTime: {
     fontSize: 12,
-    marginTop: 3,
+    color: DarkThemeColors.muted,
+    letterSpacing: 0.5,
+  },
+  callDetails: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  callLocation: {
+    fontSize: 14,
+    color: DarkThemeColors.muted,
+    marginLeft: 4,
+    letterSpacing: 0.5,
+  },
+  callCardActions: {
+    justifyContent: "flex-end",
+    paddingTop: 8,
   },
   acceptButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 5,
+    backgroundColor: DarkThemeColors.primary,
+    marginRight: 8,
+    borderRadius: 30,
   },
-  acceptButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+  declineButton: {
+    borderColor: DarkThemeColors.muted,
+    borderRadius: 30,
+  },
+  buttonContent: {
+    height: 40,
+    paddingHorizontal: 16,
+  },
+  buttonLabel: {
+    color: DarkThemeColors.text,
+    fontSize: 14,
+    letterSpacing: 0.5,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+    backgroundColor: DarkThemeColors.card,
+    borderRadius: 12,
+  },
+  emptyStateText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: DarkThemeColors.muted,
+    textAlign: "center",
+    letterSpacing: 0.5,
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   TouchableOpacity,
@@ -6,14 +6,86 @@ import {
   StyleSheet,
   Dimensions,
   ActivityIndicator,
+  Modal,
+  SafeAreaView,
+  ScrollView,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { RTCView } from 'react-native-webrtc';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import TestClientComponent from './TestClientComponent';
 import { SIGNALING_SERVER_URL } from '../../Config';
-import { transparent } from 'react-native-paper/lib/typescript/styles/themes/v2/colors';
+
+// Debug Panel Component using a Modal approach
+const DebugPanel = ({ serverUrl }) => {
+  const [isVisible, setIsVisible] = useState(false);
+
+  const togglePanel = () => {
+    setIsVisible(!isVisible);
+  };
+
+  return (
+    <View style={styles.debugButtonContainer}>
+      <TouchableOpacity
+        style={styles.debugIconButton}
+        onPress={togglePanel}
+      >
+        <Icon 
+          name="bug-report" 
+          size={24} 
+          color="#fff" 
+        />
+        <Text style={styles.debugIconText}>Test Clients</Text>
+      </TouchableOpacity>
+      
+      {/* Use a Modal instead of animation for more reliable rendering */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isVisible}
+        onRequestClose={() => setIsVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Debug Test Clients</Text>
+              <TouchableOpacity onPress={() => setIsVisible(false)}>
+                <Icon name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.clientsContainer}>
+              <View style={styles.clientSection}>
+                <Text style={styles.clientSectionTitle}>Test Client 1</Text>
+                <View style={styles.testClient}>
+                  <TestClientComponent 
+                    serverUrl={serverUrl} 
+                    clientName="Test Client 1" 
+                  />
+                </View>
+              </View>
+              
+              <View style={styles.clientSection}>
+                <Text style={styles.clientSectionTitle}>Test Client 2</Text>
+                <View style={styles.testClient}>
+                  <TestClientComponent 
+                    serverUrl={serverUrl} 
+                    clientName="Test Client 2" 
+                  />
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </Modal>
+    </View>
+  );
+};
 
 const VideoCallPage = ({ webRTCSystem }) => {
+  const navigation = useNavigation();
+
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -70,39 +142,6 @@ const VideoCallPage = ({ webRTCSystem }) => {
     <View style={styles.container}>
       {/* Local video stream (top half) */}
       <View style={styles.localStreamContainer}>
-
-
-
-
-
-
-
-
-
-
-      { /* Test clients container */ }
-      
-        
-        
-          <View style={styles.testClient}>
-            <TestClientComponent 
-              serverUrl={SIGNALING_SERVER_URL} 
-              clientName="Test Client 1" 
-            />
-          </View>
-       
-      
-
-
-
-
-
-
-
-
-
-
-
         {localStream ? (
           <RTCView
             streamURL={localStream.toURL()}
@@ -138,11 +177,13 @@ const VideoCallPage = ({ webRTCSystem }) => {
         )}
       </View>
 
+      {/* Debug Panel */}
+      <DebugPanel serverUrl={SIGNALING_SERVER_URL} />
+
       {/* End call button */}
       <TouchableOpacity style={styles.endCallButton} onPress={handleEndCall}>
         <Text style={styles.endCallButtonText}>End Call</Text>
       </TouchableOpacity>
-
     </View>
   );
 };
@@ -201,63 +242,76 @@ const styles = StyleSheet.create({
     paddingHorizontal: 25,
     paddingVertical: 12,
     borderRadius: 25,
+    zIndex: 10,
   },
   endCallButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
   },
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  testButton: {
-    backgroundColor: '#673AB7',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 20,
+  
+  // Debug Panel styles with Modal
+  debugButtonContainer: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    zIndex: 9999,
   },
-  testButtonText: {
+  debugIconButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50', // Green color
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+  },
+  debugIconText: {
     color: '#fff',
+    marginLeft: 5,
     fontWeight: 'bold',
   },
-  testClientsContainer: {
-    marginTop: 20,
-    padding: 16,
-    borderTopWidth: 1,
-    borderColor: '#ddd',
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end', // Modal slides up from the bottom
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
-  testClientsHeader: {
+  modalContent: {
+    height: '70%', // Take up 70% of the screen
+    backgroundColor: '#212121',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
+    color: '#fff',
+  },
+  clientsContainer: {
+    flex: 1,
+  },
+  clientSection: {
+    marginBottom: 20,
+  },
+  clientSectionTitle: {
+    fontSize: 16,
+    color: '#4CAF50',
+    fontWeight: '600',
     marginBottom: 10,
   },
-  clientsRow: {
-    flexDirection: 'row',
-    height: 400,
-  },
   testClient: {
-    flex: 1,
     borderWidth: 1,
-    borderColor: '#ccc',
-    margin: 5,
+    borderColor: '#555',
+    borderRadius: 8,
+    height: 300, // Fixed height
+    backgroundColor: '#333',
+    overflow: 'hidden',
   },
 });
 
