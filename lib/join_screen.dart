@@ -1,55 +1,77 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:video_call_app/meeting_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'api_call.dart';
 
+class JoinScreen extends StatefulWidget {
+  const JoinScreen({Key? key}) : super(key: key);
 
-class JoinScreen extends StatelessWidget {
+  @override
+  State<JoinScreen> createState() => _JoinScreenState();
+}
+
+class _JoinScreenState extends State<JoinScreen> {
+  final _nameController = TextEditingController();
   final _meetingIdController = TextEditingController();
-  final String? authToken = dotenv.env['AUTH_TOKEN'];
+  final String? token = dotenv.env['AUTH_TOKEN'];
 
-  JoinScreen({super.key});
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _meetingIdController.dispose();
+    super.dispose();
+  }
 
-  void onCreateButtonPressed(BuildContext context) async {
-    try {
-      print("Attempting to create a new meeting...");
-      final meetingId = await createMeeting();
-      print("Meeting created successfully! Meeting ID: $meetingId");
+  void navigateToMeeting(String meetingId, String displayName) {
+    if (displayName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter your name")),
+      );
+      return;
+    }
 
-      if (context.mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => MeetingScreen(
-              meetingId: meetingId,
-              token: authToken!,
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      print("Error creating meeting: $e");
-      if (context.mounted) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MeetingScreen(
+          meetingId: meetingId,
+          token: token!,
+          displayName: displayName,
+        ),
+      ),
+    );
+  }
+
+  void onCreateButtonPressed() async {
+    var statuses = await [Permission.camera, Permission.microphone].request();
+    if (statuses[Permission.camera]!.isGranted && statuses[Permission.microphone]!.isGranted) {
+      try {
+        final meetingId = await createMeeting();
+        final displayName = _nameController.text.trim();
+        navigateToMeeting(meetingId, displayName);
+      } catch (e) {
+        print("Error creating meeting: $e");
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text("Failed to create a meeting. Please check the logs.")),
+          const SnackBar(content: Text("Failed to create a meeting.")),
         );
       }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Camera and Mic permissions are required.")),
+      );
     }
   }
 
+  void onJoinButtonPressed() {
+    String meetingId = _meetingIdController.text.trim();
+    final displayName = _nameController.text.trim();
 
-  void onJoinButtonPressed(BuildContext context) {
-    String meetingId = _meetingIdController.text;
     if (meetingId.isNotEmpty) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => MeetingScreen(
-            meetingId: meetingId,
-            token: authToken!,
-          ),
-        ),
+      navigateToMeeting(meetingId, displayName);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a valid meeting ID")),
       );
     }
   }
@@ -65,11 +87,19 @@ class JoinScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ElevatedButton(
-              onPressed: () => onCreateButtonPressed(context),
-              child: const Text('Create Meeting'),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Your Name',
+                border: OutlineInputBorder(),
+              ),
             ),
             const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: onCreateButtonPressed,
+              child: const Text('Create Meeting'),
+            ),
+            const SizedBox(height: 40),
             TextField(
               controller: _meetingIdController,
               decoration: const InputDecoration(
@@ -79,7 +109,7 @@ class JoinScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: () => onJoinButtonPressed(context),
+              onPressed: onJoinButtonPressed,
               child: const Text('Join Meeting'),
             ),
           ],

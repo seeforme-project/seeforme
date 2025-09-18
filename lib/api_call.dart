@@ -10,12 +10,15 @@ Future<String> createMeeting() async {
     headers: {'Authorization': authToken!},
   );
 
-  print("Create Meeting API Response Status Code: ${httpResponse.statusCode}");
-  print("Create Meeting API Response Body: ${httpResponse.body}");
 
   if (httpResponse.statusCode == 200) {
     return json.decode(httpResponse.body)['roomId'];
   } else {
-    throw Exception("Failed to create meeting: ${httpResponse.body}");
+    print("-----------------------------------------");
+    print("API CALL FAILED");
+    print("Status Code: ${httpResponse.statusCode}");
+    print("Response Body: ${httpResponse.body}");
+    print("-----------------------------------------");
+    throw Exception("Failed to create meeting. See logs for details.");
   }
 }
