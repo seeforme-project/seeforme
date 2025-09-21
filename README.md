@@ -4,7 +4,7 @@
 
 [![Status](https://img.shields.io/badge/Status-Active-4CAF50?style=for-the-badge&logo=statuspage&logoColor=white)](https://github.com/mujtaba-io/seeforme)
 [![License](https://img.shields.io/badge/License-MIT-2196F3?style=for-the-badge&logo=bookstack&logoColor=white)](LICENSE)
-[![React Native](https://img.shields.io/badge/React-Native-02569B?style=for-the-badge&logo=react-native&logoColor=white)](https://flutter.dev)
+[![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
 [<img src="https://img.shields.io/badge/Documentation-212121?style=for-the-badge&logo=readthedocs&logoColor=white">](https://github.com/mujtaba-io/seeforme/issues)
 
 ## About
@@ -30,7 +30,7 @@ This project follows a microservice architecture with:
 | Repository | Purpose | Tech Stack |
 |------------|---------|------------|
 | [seeforme](https://github.com/mujtaba-io/seeforme) | Mobile Application | React Native |
-| [seeforme-backend](https://github.com/mujtaba-io/seeforme-backend) | API & Authentication | Django, DRF |
+| [seeforme-backend](https://github.com/mujtaba-io/seeforme-backend) | API & Authentication | Flask |
 
 
 ## Development
