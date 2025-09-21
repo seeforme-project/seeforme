@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:video_call_app/meeting_screen.dart';
+import 'package:seeforme/meeting_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'api_call.dart';
 
@@ -25,9 +25,9 @@ class _JoinScreenState extends State<JoinScreen> {
 
   void navigateToMeeting(String meetingId, String displayName) {
     if (displayName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter your name")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please enter your name")));
       return;
     }
 
@@ -45,7 +45,8 @@ class _JoinScreenState extends State<JoinScreen> {
 
   void onCreateButtonPressed() async {
     var statuses = await [Permission.camera, Permission.microphone].request();
-    if (statuses[Permission.camera]!.isGranted && statuses[Permission.microphone]!.isGranted) {
+    if (statuses[Permission.camera]!.isGranted &&
+        statuses[Permission.microphone]!.isGranted) {
       try {
         final meetingId = await createMeeting();
         final displayName = _nameController.text.trim();
@@ -58,7 +59,9 @@ class _JoinScreenState extends State<JoinScreen> {
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Camera and Mic permissions are required.")),
+        const SnackBar(
+          content: Text("Camera and Mic permissions are required."),
+        ),
       );
     }
   }
@@ -79,9 +82,7 @@ class _JoinScreenState extends State<JoinScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('VideoSDK Quick Start'),
-      ),
+      appBar: AppBar(title: const Text('VideoSDK Quick Start')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(

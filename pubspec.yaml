@@ -1,5 +1,5 @@
-name: video_call_app
-description: "A new Flutter project."
+name: seeforme
+description: "An app to assist blind people."
 publish_to: "none"
 
 version: 1.0.0+1
@@ -14,6 +14,27 @@ dependencies:
   videosdk: ^2.3.1
   flutter_dotenv: ^5.1.0
   permission_handler: ^12.0.1
+
+
+  # New deps, from AI part:
+  # state management
+  flutter_bloc: ^9.1.1
+
+  # web socket communication
+  web_socket_channel: ^3.0.3
+
+  # camera and image processing
+  camera: ^0.11.1
+  image: ^4.5.4
+
+  # voice engine for real-time audio processing
+  flutter_voice_engine: ^0.0.1 # Adnan's custom package on his git repo)
+
+  google_fonts: ^6.2.1
+  
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
 
 
 dev_dependencies:

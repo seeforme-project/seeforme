@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:video_call_app/pages/volunteer_login_page.dart';
-import 'package:video_call_app/pages/volunteer_signup_page.dart';
+import 'package:seeforme/pages/volunteer_login_page.dart';
+import 'package:seeforme/pages/volunteer_signup_page.dart';
 
 class WelcomePage extends StatelessWidget {
   const WelcomePage({super.key});

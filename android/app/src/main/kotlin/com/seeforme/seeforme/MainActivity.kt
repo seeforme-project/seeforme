@@ -1,4 +1,4 @@
-package com.example.video_call_app
+package com.seeforme.seeforme
 
 import io.flutter.embedding.android.FlutterActivity
 
