@@ -1,4 +1,9 @@
+// lib/pages/home_page.dart
+
 import 'package:flutter/material.dart';
+import 'package:seeforme/pages/profile_page.dart';
+import 'package:seeforme/services/auth_service.dart';
+import 'package:seeforme/services/firebase_service.dart';
 
 class VolunteerHomePage extends StatefulWidget {
   const VolunteerHomePage({super.key});
@@ -8,7 +13,55 @@ class VolunteerHomePage extends StatefulWidget {
 }
 
 class _VolunteerHomePageState extends State<VolunteerHomePage> {
+  final _firebaseService = FirebaseService();
   bool _isAvailable = false;
+  String? _currentUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserIdAndInitFirebase();
+  }
+
+  Future<void> _loadUserIdAndInitFirebase() async {
+    final userId = await TokenStorage.getUserId();
+    if (userId != null) {
+      setState(() {
+        _currentUserId = userId;
+      });
+      await _firebaseService.initializeForVolunteer(userId);
+    } else {
+      // Handle case where user ID is not found
+      print("Error: User ID not found. Cannot initialize Firebase services.");
+    }
+  }
+
+  Future<void> _toggleAvailability() async {
+    if (_currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not identify user. Please log in again.")),
+      );
+      return;
+    }
+
+    final newAvailability = !_isAvailable;
+    // Optimistically update UI
+    setState(() {
+      _isAvailable = newAvailability;
+    });
+
+    try {
+      // Update status in Firebase
+      await _firebaseService.updateAvailability(_currentUserId!, newAvailability);
+    } catch (e) {
+      // If Firebase update fails, revert UI and show error
+      setState(() {
+        _isAvailable = !newAvailability;
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Failed to update status: $e")));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,11 +82,17 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.headset, color: Color(0xFFF3F4F6)),
-            onPressed: () {},
+            onPressed: () {
+              // Placeholder for future feature
+            },
           ),
           IconButton(
             icon: const Icon(Icons.account_circle, color: Color(0xFFF3F4F6)),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const ProfilePage()),
+              );
+            },
           ),
         ],
         bottom: PreferredSize(
@@ -48,19 +107,13 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
           children: [
             Center(
               child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _isAvailable = !_isAvailable;
-                  });
-                },
+                onTap: _toggleAvailability,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 400),
                   width: 180,
                   height: 180,
                   decoration: BoxDecoration(
-                    color: _isAvailable
-                        ? const Color(0xFF059669)
-                        : const Color(0xFF4B5563),
+                    color: _isAvailable ? const Color(0xFF059669) : const Color(0xFF4B5563),
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
@@ -105,7 +158,6 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
               ),
             ),
             const SizedBox(height: 16),
-            // Placeholder for IncomingCallsList
             Container(
               height: 100,
               decoration: BoxDecoration(

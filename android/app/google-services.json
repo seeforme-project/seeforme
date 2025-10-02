@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "691127444817",
+    "project_id": "seeforme-backend",
+    "storage_bucket": "seeforme-backend.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:691127444817:android:5c7da87cd90f1acb4c5f70",
+        "android_client_info": {
+          "package_name": "com.seeforme.seeforme"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGcYz6i-AtdngXOvYoP6OvLETA80_2tCM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

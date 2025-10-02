@@ -527,30 +527,48 @@ class SessionCubit extends Cubit<SessionState> {
     }
   }
 
+  // The corrected startRecording() function
+
+  // Add these print statements to your startRecording() function
+
   Future<void> startRecording() async {
-    print('Starting recording');
+    print("--- START RECORDING CALLED ---"); // <-- ADD THIS
     try {
       if (!(_voiceEngine?.isInitialized ?? false)) {
+        print("Voice engine not ready, initializing..."); // <-- ADD THIS
         await _initVoiceEngine();
       }
+
+      emit(state.copyWith(isRecording: true));
+      print("--- STATE EMITTED: isRecording is now true ---"); // <-- ADD THIS
+
       _voiceEngineSubscription?.cancel();
       _voiceEngineSubscription = _voiceEngine!.audioChunkStream.listen(
-        (audioData) {
-          if (_webSocket != null && _isWebSocketOpen && state.isRecording) {
-            _webSocket!.sink.add(audioData);
+              (audioData) {
+            // This is the most important print statement
+            print("--- AUDIO CHUNK RECEIVED! Length: ${audioData.length}, isRecording state: ${state.isRecording} ---"); // <-- ADD THIS
+
+            if (_webSocket != null && _isWebSocketOpen && state.isRecording) {
+              _webSocket!.sink.add(audioData);
+            }
+            final amplitude = computeRMSAmplitude(audioData);
+            emit(state.copyWith(visualizerAmplitude: amplitude));
+          },
+          onError: (error, stackTrace) {
+            print('!!! Recording stream ERROR: $error\n$stackTrace'); // <-- ADD THIS
+            emit(state.copyWith(error: 'Recording error: $error', isError: true));
+          },
+          onDone: () {
+            print("--- Recording stream is DONE. ---"); // <-- ADD THIS
           }
-          final amplitude = computeRMSAmplitude(audioData);
-          emit(state.copyWith(visualizerAmplitude: amplitude));
-        },
-        onError: (error, stackTrace) {
-          print('Recording error: $error\n$stackTrace');
-          emit(state.copyWith(error: 'Recording error: $error', isError: true));
-        },
       );
+
+      print("Now calling _voiceEngine.startRecording()..."); // <-- ADD THIS
       await _voiceEngine!.startRecording();
-      emit(state.copyWith(isRecording: true));
+      print("--- Call to _voiceEngine.startRecording() is COMPLETE. ---"); // <-- ADD THIS
+
     } catch (e, stackTrace) {
-      print('Failed to start recording: $e\n$stackTrace');
+      print('!!! FAILED to start recording: $e\n$stackTrace'); // <-- ADD THIS
       emit(
         state.copyWith(error: 'Failed to start recording: $e', isError: true),
       );

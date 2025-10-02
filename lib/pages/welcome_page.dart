@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:seeforme/pages/volunteer_login_page.dart';
 import 'package:seeforme/pages/volunteer_signup_page.dart';
 
+import 'blind_user_home_page.dart';
+
 class WelcomePage extends StatelessWidget {
   const WelcomePage({super.key});
 
@@ -20,6 +22,7 @@ class WelcomePage extends StatelessWidget {
                 style: TextStyle(
                   color: Color(0xFF6B7280),
                   fontSize: 12,
+
                   letterSpacing: 2,
                   fontWeight: FontWeight.w600,
                 ),
@@ -109,10 +112,10 @@ class WelcomePage extends StatelessWidget {
               const SizedBox(height: 20),
               OutlinedButton.icon(
                 onPressed: () {
-                  // Navigate to BlindLogin
+                  // Navigate to the new BlindUserHomePage
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (context) => const VolunteerSignupPage(),
+                      builder: (context) => const BlindUserHomePage(), // <<< CORRECT
                     ),
                   );
                 },
