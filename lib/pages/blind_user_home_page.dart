@@ -6,8 +6,8 @@ import 'package:seeforme/api_call.dart';
 import 'package:seeforme/liveai/session_cubit.dart';
 import 'package:seeforme/liveai/session_page.dart';
 import 'package:seeforme/meeting_screen.dart';
-import 'package:seeforme/services/cloud_functions_service.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // Import dotenv
+import 'package:seeforme/services/auth_service.dart'; // ADD THIS
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class BlindUserHomePage extends StatefulWidget {
   const BlindUserHomePage({super.key});
@@ -18,7 +18,10 @@ class BlindUserHomePage extends StatefulWidget {
 
 class _BlindUserHomePageState extends State<BlindUserHomePage> {
   bool _isCalling = false;
-  final _functionsService = CloudFunctionsService();
+  // CHANGE THIS:
+  // final _functionsService = CloudFunctionsService();
+  // TO THIS:
+  final _apiService = AuthService();
 
   Future<void> _initiateCall() async {
     setState(() {
@@ -29,8 +32,11 @@ class _BlindUserHomePageState extends State<BlindUserHomePage> {
       // 1. Create a VideoSDK meeting room
       final meetingId = await createMeeting();
 
-      // 2. Call our Firebase Cloud Function to find and notify a volunteer
-      await _functionsService.findVolunteerAndNotify(meetingId: meetingId);
+      // 2. Call our NEW backend endpoint to find and notify a volunteer
+      // CHANGE THIS:
+      // await _functionsService.findVolunteerAndNotify(meetingId: meetingId);
+      // TO THIS:
+      await _apiService.findVolunteerAndNotify(meetingId: meetingId);
 
       // 3. Get the VideoSDK JWT Token from your .env file
       final videoSdkToken = dotenv.env['AUTH_TOKEN'];
@@ -39,7 +45,7 @@ class _BlindUserHomePageState extends State<BlindUserHomePage> {
       }
 
       // 4. Automatically navigate to the meeting screen
-      // Use pushReplacement to prevent user from going back to this page during a call
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (context) => MeetingScreen(
@@ -51,6 +57,7 @@ class _BlindUserHomePageState extends State<BlindUserHomePage> {
       );
 
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(backgroundColor: Colors.orangeAccent, content: Text(e.toString().replaceAll('Exception: ', ''))),
       );

@@ -174,4 +174,37 @@ class AuthService {
       await TokenStorage.clearTokens();
     }
   }
+
+  Future<void> findVolunteerAndNotify({required String meetingId}) async {
+    // This endpoint is called by a blind user who isn't authenticated,
+    // so we don't need to send an auth token.
+    final url = Uri.parse('$_baseUrl/call-volunteer');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'meetingId': meetingId}),
+      ).timeout(const Duration(seconds: 20)); // Longer timeout for this operation
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        print('Successfully notified volunteer.');
+        // Success is confirmed, no need to return data.
+        return;
+      } else {
+        // Pass the specific error message from the backend to the user.
+        throw Exception(responseBody['error'] ?? 'An unknown error occurred while finding a volunteer.');
+      }
+    } on TimeoutException {
+      throw Exception('The server took too long to respond. Please try again.');
+    } catch (e) {
+      if (e is Exception) {
+        rethrow; // Re-throw exceptions that already have a clear message.
+      }
+      print('An error occurred during findVolunteerAndNotify: $e');
+      throw Exception('Failed to connect to the server. Please check your internet connection.');
+    }
+  }
 }
