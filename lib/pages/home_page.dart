@@ -237,18 +237,16 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
                             backgroundColor: const Color(0xFF10B981),
                           ),
                           child: const Text('Answer'),
+                          // =================== FIX START ===================
                           onPressed: () async {
                             try {
-                              // 1. Remove the call from DB to claim it
-                              await _firebaseService.answerCall(callId);
-
-                              // 2. Navigate to the meeting
                               final videoSdkToken = dotenv.env['AUTH_TOKEN'];
                               if (videoSdkToken == null) {
                                 throw Exception("VideoSDK Token not found.");
                               }
 
-                              if (!mounted) return;
+                              // 1. Navigate to the meeting screen BEFORE awaiting the database change.
+                              // This ensures the BuildContext is valid and avoids the race condition.
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (context) => MeetingScreen(
@@ -258,6 +256,10 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
                                   ),
                                 ),
                               );
+
+                              // 2. AFTER initiating navigation, remove the call from DB to claim it.
+                              // This notifies the blind user and updates the list for other volunteers.
+                              await _firebaseService.answerCall(callId);
                             } catch (e) {
                               if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -267,6 +269,7 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
                               );
                             }
                           },
+                          // =================== FIX END =====================
                         ),
                       );
                     },

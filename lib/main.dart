@@ -28,7 +28,7 @@ class SeeForMeApp extends StatelessWidget {
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF4F46E5),
-            foregroundColor: Colors.white,
+            foregroundColor: const Color.fromARGB(255, 19, 9, 9),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(30),
             ),
