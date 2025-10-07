@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:seeforme/pages/volunteer_login_page.dart';
 import 'package:seeforme/pages/volunteer_signup_page.dart';
 
-import 'blind_user_home_page.dart';
+import 'package:seeforme/liveai/session_cubit.dart';
+import 'package:seeforme/liveai/session_page.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class WelcomePage extends StatelessWidget {
   const WelcomePage({super.key});
@@ -115,7 +117,10 @@ class WelcomePage extends StatelessWidget {
                   // Navigate to the new BlindUserHomePage
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (context) => const BlindUserHomePage(), // <<< CORRECT
+                      builder: (context) => BlocProvider(
+                        create: (context) => SessionCubit(),
+                        child: const SessionPage(),
+                      ),
                     ),
                   );
                 },

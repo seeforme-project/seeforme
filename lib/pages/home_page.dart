@@ -237,7 +237,6 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
                             backgroundColor: const Color(0xFF10B981),
                           ),
                           child: const Text('Answer'),
-                          // =================== FIX START ===================
                           onPressed: () async {
                             try {
                               final videoSdkToken = dotenv.env['AUTH_TOKEN'];
@@ -269,7 +268,6 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
                               );
                             }
                           },
-                          // =================== FIX END =====================
                         ),
                       );
                     },
