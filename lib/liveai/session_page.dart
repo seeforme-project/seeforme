@@ -1,6 +1,3 @@
-// lib/liveai/session_page.dart
-
-// NEW: Import necessary packages for call logic
 import 'dart:async';
 import 'dart:ui';
 import 'package:camera/camera.dart';
@@ -11,6 +8,7 @@ import 'package:seeforme/api_call.dart';
 import 'package:seeforme/liveai/session_cubit.dart';
 import 'package:seeforme/meeting_screen.dart';
 import 'package:seeforme/services/firebase_service.dart';
+import 'package:seeforme/services/mlkit_service.dart';
 
 class SessionPage extends StatefulWidget {
   const SessionPage({super.key});
@@ -23,12 +21,12 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
   bool _showDebug = false;
   late TextEditingController _wsController;
 
-  // NEW: State variables moved from the test page
-  bool _isCalling = false;
+  // Services
   final _firebaseService = FirebaseService();
+  final _mlkitService = MLKitService();
   StreamSubscription? _callSubscription;
 
-  // NEW: Variables for triple-tap detection
+  // Gesture detection variables
   int _tapCount = 0;
   Timer? _tapTimer;
 
@@ -36,29 +34,165 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _wsController = TextEditingController(text: WEBSOCKET_URL);
+
+    // Initialize MLKit service
+    _mlkitService.initialize();
+
+    // Start session in idle mode (camera preview only, no WebSocket)
     context.read<SessionCubit>().startSession();
+  }
+
+  Widget _debugButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white70, size: 16),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cameraPreviewBox(CameraController controller) {
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.white24),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Center(
+          child: AspectRatio(
+            aspectRatio: controller.value.aspectRatio,
+            child: CameraPreview(controller),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _wsController.dispose();
     context.read<SessionCubit>().stopSession();
-    // NEW: Clean up the call listener and tap timer to prevent memory leaks
     _callSubscription?.cancel();
     _tapTimer?.cancel();
+    _mlkitService.dispose();
     super.dispose();
   }
 
-  // NEW: The entire call initiation logic, copied from your test page.
+  // Handle swipe up gesture - Start online mode
+  Future<void> _handleSwipeUp() async {
+    final cubit = context.read<SessionCubit>();
+    if (cubit.state.mode != SessionMode.idle) return;
+
+    await _mlkitService.speak("Connecting to online assistant...");
+    await cubit.startOnlineMode();
+  }
+
+  // UPDATED: Handle swipe down gesture - Start offline mode
+  Future<void> _handleSwipeDown() async {
+    final cubit = context.read<SessionCubit>();
+    if (cubit.state.mode != SessionMode.idle) return;
+
+    await cubit.startOfflineMode();
+
+    final cameraImage = cubit.getCurrentCameraImage();
+    // Get the description of the camera to determine sensor orientation
+    final cameraDescription = cubit.cameraController?.description;
+
+    if (cameraImage != null && cameraDescription != null) {
+      // Pass both the image AND the camera description to the service
+      await _mlkitService.performOfflineAnalysis(
+        cameraImage,
+        cameraDescription,
+      );
+    } else {
+      await _mlkitService.speak("Camera image not available for analysis.");
+    }
+
+    // Return to idle mode after analysis
+    await cubit.cancelCurrentMode();
+  }
+
+  // Handle double tap gesture - Cancel current mode
+  Future<void> _handleDoubleTap() async {
+    final cubit = context.read<SessionCubit>();
+    if (cubit.state.mode == SessionMode.idle) return;
+
+    // Stop any ongoing TTS from MLKit before announcing cancellation
+    await _mlkitService.stopSpeaking();
+
+    switch (cubit.state.mode) {
+      case SessionMode.online:
+        await _mlkitService.speak("Disconnected from online assistant.");
+        break;
+      case SessionMode.offline:
+        await _mlkitService.speak("Offline assist stopped.");
+        break;
+      case SessionMode.idle:
+        return;
+    }
+
+    await cubit.cancelCurrentMode();
+  }
+
+  // Combined tap handler for both double and triple taps
+  void _handleTap() {
+    _tapCount++;
+    _tapTimer?.cancel(); // Cancel any previous timer
+
+    if (_tapCount == 3) {
+      // Triple tap detected
+      _handleTripleTap();
+      _tapCount = 0;
+    } else {
+      // On the first or second tap, start a timer.
+      // If another tap comes, it will cancel this and check again.
+      // If it expires, it will execute the appropriate action.
+      _tapTimer = Timer(const Duration(milliseconds: 300), () {
+        if (_tapCount == 1) {
+          // Single tap - you can add an action here if you want
+        } else if (_tapCount == 2) {
+          // Double tap action
+          _handleDoubleTap();
+        }
+        _tapCount = 0; // Reset after the timer fires
+      });
+    }
+  }
+
+  // Handle triple tap gesture for calling volunteers
+  void _handleTripleTap() {
+    final cubit = context.read<SessionCubit>();
+    if (cubit.state.mode != SessionMode.idle) return;
+
+    print("Triple tap detected! Initiating call...");
+    _initiateCall();
+  }
+
+  // Legacy call functionality (unchanged)
   Future<void> _initiateCall() async {
-    // Note: It's good practice to stop the AI session to free up camera/mic
-    // before starting a video call.
     context.read<SessionCubit>().stopSession();
-
-    setState(() {
-      _isCalling = true;
-    });
-
     try {
       final meetingId = await createMeeting();
       final videoSdkToken = dotenv.env['AUTH_TOKEN'];
@@ -67,35 +201,29 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
       }
 
       final callId = await _firebaseService.addCallRequest(meetingId);
+      _callSubscription = _firebaseService
+          .listenForCallAcceptance(callId)
+          .listen((event) {
+            if (!event.snapshot.exists) {
+              _callSubscription?.cancel();
+              if (!mounted) return;
 
-      _callSubscription = _firebaseService.listenForCallAcceptance(callId).listen((
-        event,
-      ) {
-        if (!event.snapshot.exists) {
-          _callSubscription?.cancel();
-          if (!mounted) return;
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => MeetingScreen(
+                    meetingId: meetingId,
+                    token: videoSdkToken,
+                    displayName: "User in Need",
+                  ),
+                ),
+              );
+            }
+          });
 
-          // Using pushReplacement ensures the user can't go "back" to the calling screen.
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => MeetingScreen(
-                meetingId: meetingId,
-                token: videoSdkToken,
-                displayName: "User in Need",
-              ),
-            ),
-          );
-        }
-      });
-
-      // Timeout after 60 seconds
       Future.delayed(const Duration(seconds: 60), () {
-        if (mounted && _isCalling) {
+        if (mounted) {
           _callSubscription?.cancel();
           _firebaseService.answerCall(callId);
-          setState(() {
-            _isCalling = false;
-          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
@@ -113,34 +241,11 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
             content: Text(e.toString().replaceAll('Exception: ', '')),
           ),
         );
-        setState(() {
-          _isCalling = false;
-        });
       }
     }
   }
 
-  // NEW: Logic to handle tap events and detect a triple tap.
-  void _handleTripleTap() {
-    // A screen reader might intercept gestures. We want to ensure we're not already in a call.
-    if (_isCalling) return;
-
-    _tapCount++;
-    // We restart the timer on each tap.
-    _tapTimer?.cancel();
-
-    if (_tapCount == 3) {
-      // Triple tap detected!
-      print("Triple tap detected! Initiating call..."); // For debugging
-      _initiateCall();
-      _tapCount = 0; // Reset for next time
-    } else {
-      // If 3 taps don't happen within 500ms, reset the counter.
-      _tapTimer = Timer(const Duration(milliseconds: 500), () {
-        _tapCount = 0;
-      });
-    }
-  }
+  // -- BUILD METHOD AND UI WIDGETS BELOW (UNCHANGED) --
 
   @override
   Widget build(BuildContext context) {
@@ -152,11 +257,23 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
         child: Icon(_showDebug ? Icons.close : Icons.bug_report),
         tooltip: 'Debug',
       ),
-      // NEW: Wrap the body in a GestureDetector to capture taps anywhere on the screen.
       body: GestureDetector(
-        onTap: _handleTripleTap, // The magic happens here!
-        // Use a transparent behavior to ensure the detector covers the whole area,
-        // even empty spaces.
+        onTap: _handleTap, // Use the unified tap handler
+        onPanEnd: (details) {
+          final velocity = details.velocity.pixelsPerSecond;
+          final dy = velocity.dy;
+
+          if (dy.abs() > 300) {
+            // Adjusted sensitivity
+            if (dy < -300) {
+              // Swipe up
+              _handleSwipeUp();
+            } else if (dy > 300) {
+              // Swipe down
+              _handleSwipeDown();
+            }
+          }
+        },
         behavior: HitTestBehavior.translucent,
         child: BlocConsumer<SessionCubit, SessionState>(
           listenWhen: (previous, current) =>
@@ -175,6 +292,7 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
 
             return Stack(
               children: [
+                // Main content overlay (black screen with title)
                 Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -186,26 +304,30 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
                           fontSize: 32,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 1.2,
+                          shadows: [
+                            Shadow(
+                              offset: Offset(2, 2),
+                              blurRadius: 4,
+                              color: Colors.black.withOpacity(0.8),
+                            ),
+                          ],
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Listening & Watching...\n(Triple tap to call a volunteer)', // NEW: User instruction
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w400,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+                      const SizedBox(height: 16),
+                      _buildModeInstructions(state.mode),
                     ],
                   ),
                 ),
+
+                // Debug overlay
                 if (_showDebug)
                   _buildDebugOverlay(state, cameraController, cubit),
-                // NEW: Show a calling overlay when a call is being initiated.
-                if (_isCalling) _buildCallingOverlay(),
+
+                // Mode-specific overlays
+                if (state.mode == SessionMode.offline) _buildOfflineOverlay(),
+                if (state.mode == SessionMode.online && state.connecting)
+                  _buildConnectingOverlay(),
               ],
             );
           },
@@ -214,18 +336,56 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
     );
   }
 
-  // NEW: A helper widget to show feedback while the call is connecting.
-  Widget _buildCallingOverlay() {
+  Widget _buildModeInstructions(SessionMode mode) {
+    String instructions;
+    Color color;
+
+    switch (mode) {
+      case SessionMode.idle:
+        instructions =
+            'Swipe up for online assistant\nSwipe down for offline analysis\nTriple tap to call volunteer\nDouble tap to cancel';
+        color = Colors.white70;
+        break;
+      case SessionMode.offline:
+        instructions = 'Analyzing with offline AI...\nDouble tap to cancel';
+        color = Colors.greenAccent;
+        break;
+      case SessionMode.online:
+        instructions =
+            'Connected to online assistant\nDouble tap to disconnect';
+        color = Colors.blueAccent;
+        break;
+    }
+
+    return Text(
+      instructions,
+      style: TextStyle(
+        color: color,
+        fontSize: 18,
+        fontWeight: FontWeight.w400,
+        shadows: [
+          Shadow(
+            offset: Offset(1, 1),
+            blurRadius: 2,
+            color: Colors.black.withOpacity(0.8),
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+    );
+  }
+
+  Widget _buildOfflineOverlay() {
     return Container(
-      color: Colors.black.withOpacity(0.8),
+      color: Colors.black.withOpacity(0.6),
       child: const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: Colors.white),
+            CircularProgressIndicator(color: Colors.greenAccent),
             SizedBox(height: 24),
             Text(
-              'Calling a Volunteer...',
+              'Offline AI Analysis',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 22,
@@ -234,7 +394,7 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
             ),
             SizedBox(height: 8),
             Text(
-              'Please wait.',
+              'Analyzing image with MLKit...',
               style: TextStyle(color: Colors.white70, fontSize: 16),
             ),
           ],
@@ -243,8 +403,34 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
     );
   }
 
-  // The rest of your debug widgets remain unchanged.
-  // ... _buildDebugOverlay, _cameraPreviewBox, _statusLine, _debugButton ...
+  Widget _buildConnectingOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.6),
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Colors.blueAccent),
+            SizedBox(height: 24),
+            Text(
+              'Connecting to Online Assistant',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Please wait...',
+              style: TextStyle(color: Colors.white70, fontSize: 16),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDebugOverlay(
     SessionState state,
     CameraController? controller,
@@ -273,7 +459,6 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
                     IconButton(
                       icon: const Icon(Icons.refresh, color: Colors.white70),
                       tooltip: 'Restart Session',
-                      // startSession handles both initial connections and reconnections cleanly.
                       onPressed: () => cubit.startSession(),
                     ),
                   ],
@@ -322,16 +507,19 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
                       onTap: () => cubit.switchCamera(),
                     ),
                     _debugButton(
-                      icon: state.isRecording ? Icons.mic : Icons.mic_none,
-                      label: state.isRecording ? 'Stop Mic' : 'Start Mic',
-                      onTap: () => state.isRecording
-                          ? cubit.stopRecording()
-                          : cubit.startRecording(),
+                      icon: Icons.cloud,
+                      label: 'Online Mode',
+                      onTap: () => _handleSwipeUp(),
+                    ),
+                    _debugButton(
+                      icon: Icons.offline_bolt,
+                      label: 'Offline Mode',
+                      onTap: () => _handleSwipeDown(),
                     ),
                     _debugButton(
                       icon: Icons.stop_circle,
-                      label: 'End Session',
-                      onTap: () => cubit.stopSession(),
+                      label: 'Cancel Mode',
+                      onTap: () => _handleDoubleTap(),
                     ),
                   ],
                 ),
@@ -360,12 +548,13 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
                     ),
                   ),
                 const SizedBox(height: 24),
+                _statusLineString('Mode', state.mode.name),
                 _statusLine('Session', state.isSessionStarted),
                 _statusLine(
                   'WebSocket',
                   state.connecting
                       ? null
-                      : (state.isSessionStarted && !state.isError),
+                      : (state.mode == SessionMode.online && !state.isError),
                 ),
                 _statusLine('Recording', state.isRecording),
                 _statusLine('Bot Speaking', state.isBotSpeaking),
@@ -386,31 +575,9 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _cameraPreviewBox(CameraController controller) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: AspectRatio(
-        aspectRatio: controller.value.aspectRatio,
-        // Add a unique key. This forces Flutter to rebuild the widget from scratch
-        // when the controller instance changes, fixing the refresh/reconnect bug.
-        child: CameraPreview(controller, key: ValueKey(controller.hashCode)),
-      ),
-    );
-  }
-
   Widget _statusLine(String label, bool? active) {
-    Color color;
-    String text;
-    if (active == null) {
-      text = 'Connecting...';
-      color = Colors.amberAccent;
-    } else if (active) {
-      text = 'Active';
-      color = Colors.lightGreenAccent;
-    } else {
-      text = 'Idle';
-      color = Colors.white30;
-    }
+    final color = active == true ? Colors.lightGreenAccent : Colors.white30;
+    final text = active == true ? 'Active' : 'Idle';
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
@@ -425,31 +592,17 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _debugButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white10,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white12),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: Colors.white70),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-          ],
-        ),
+  Widget _statusLineString(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(label, style: const TextStyle(color: Colors.white60)),
+          ),
+          Text(value, style: const TextStyle(color: Colors.lightGreenAccent)),
+        ],
       ),
     );
   }

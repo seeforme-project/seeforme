@@ -10,8 +10,16 @@ import 'package:web_socket_channel/io.dart';
 import 'package:image/image.dart' as imglib;
 import 'package:permission_handler/permission_handler.dart';
 
+// Enum for different interaction modes
+enum SessionMode {
+  idle, // Waiting for gestures, camera preview active
+  offline, // MLKit analysis in progress
+  online, // WebSocket connection active
+}
+
 // SessionState
 class SessionState {
+  final SessionMode mode;
   final bool isSessionStarted;
   final bool isRecording;
 
@@ -29,6 +37,7 @@ class SessionState {
   final double visualizerAmplitude;
 
   SessionState({
+    this.mode = SessionMode.idle,
     this.isSessionStarted = false,
     this.isRecording = false,
     this.isError = false,
@@ -43,6 +52,7 @@ class SessionState {
   });
 
   SessionState copyWith({
+    SessionMode? mode,
     bool? isSessionStarted,
     bool? isRecording,
     bool? isError,
@@ -56,6 +66,7 @@ class SessionState {
     double? visualizerAmplitude,
   }) {
     return SessionState(
+      mode: mode ?? this.mode,
       isSessionStarted: isSessionStarted ?? this.isSessionStarted,
       isRecording: isRecording ?? this.isRecording,
       isError: isError ?? this.isError,
@@ -98,24 +109,22 @@ class SessionCubit extends Cubit<SessionState> {
   }
 
   Future<void> startSession() async {
-    print('Starting session');
+    print('Starting session in idle mode');
 
     await requestMicrophonePermission();
     await requestCameraPermission();
 
-    if (_isInitialized) {
-      print('Already initialized, attempting to reconnect/resume.');
-      if (!_isWebSocketOpen) {
-        connectWebSocket();
-      }
-      return;
-    }
-
     try {
-      await _initVoiceEngine();
-      _isInitialized = true;
-      connectWebSocket();
-      emit(state.copyWith(isSessionStarted: true, isError: false, error: null));
+      // Only initialize camera for idle mode, not voice engine or websocket
+      await _initCamera();
+      emit(
+        state.copyWith(
+          mode: SessionMode.idle,
+          isSessionStarted: true,
+          isError: false,
+          error: null,
+        ),
+      );
     } catch (e, stackTrace) {
       print('Initialization failed: $e\n$stackTrace');
       emit(
@@ -128,20 +137,128 @@ class SessionCubit extends Cubit<SessionState> {
     }
   }
 
-  Future<void> stopSession() async {
-    print('Stopping session');
+  // New method for starting online mode
+  Future<void> startOnlineMode() async {
+    if (state.mode != SessionMode.idle) return;
+
+    print('Starting online mode');
+    emit(state.copyWith(mode: SessionMode.online, connecting: true));
+
+    try {
+      // Reinitialize camera with yuv420 format for WebSocket compatibility
+      await _initCameraForOnlineMode();
+      await _initVoiceEngine();
+      connectWebSocket();
+    } catch (e, stackTrace) {
+      print('Online mode initialization failed: $e\n$stackTrace');
+      emit(
+        state.copyWith(
+          error: 'Failed to start online mode: $e',
+          isError: true,
+          mode: SessionMode.idle,
+          connecting: false,
+        ),
+      );
+    }
+  }
+
+  // New method for starting offline mode
+  Future<void> startOfflineMode() async {
+    if (state.mode != SessionMode.idle) return;
+
+    print('Starting offline mode');
+    emit(state.copyWith(mode: SessionMode.offline));
+
+    // Ensure camera is using nv21 format for MLKit compatibility
+    await _initCameraForOfflineMode();
+  }
+
+  // New method for canceling current mode and returning to idle
+  Future<void> cancelCurrentMode() async {
+    print('Canceling current mode: ${state.mode}');
+
+    switch (state.mode) {
+      case SessionMode.online:
+        await _stopOnlineMode();
+        break;
+      case SessionMode.offline:
+        await _stopOfflineMode();
+        break;
+      case SessionMode.idle:
+        // Already idle, nothing to do
+        break;
+    }
+
+    emit(
+      state.copyWith(
+        mode: SessionMode.idle,
+        isRecording: false,
+        connecting: false,
+        isBotSpeaking: false,
+        isError: false,
+        error: null,
+      ),
+    );
+
+    // Reinitialize camera to nv21 format for idle/offline compatibility
+    if (state.isCameraActive) {
+      await _initCamera();
+    }
+  }
+
+  Future<void> _stopOnlineMode() async {
+    print('Stopping online mode');
     _imageSendTimer?.cancel();
     _imageSendTimer = null;
-    _latestCameraImage = null;
 
+    // --- START: MODIFIED BLOCK ---
+    // 1. Stop recording and playback FIRST, while the engine object still exists.
+    await stopRecording();
     await _voiceEngine?.stopPlayback();
+
+    // 2. NOW, it is safe to shut down and nullify the engine.
     if (_voiceEngine?.isInitialized ?? false) {
       if (Platform.isAndroid) {
         await _voiceEngine?.shutdownAll();
       } else {
         await _voiceEngine?.shutdownBot();
       }
+      _voiceEngine = null; // Nullify the instance to force re-initialization
     }
+
+    // 3. Finally, close the WebSocket connection.
+    _webSocket?.sink.close();
+    _isWebSocketOpen = false;
+    _isConnecting = false;
+    // --- END: MODIFIED BLOCK ---
+  }
+
+  Future<void> _stopOfflineMode() async {
+    print('Stopping offline mode');
+    // Any cleanup needed for offline mode
+  }
+
+  Future<void> stopSession() async {
+    print('Stopping session');
+    _imageSendTimer?.cancel();
+    _imageSendTimer = null;
+    _latestCameraImage = null;
+
+    // --- START: MODIFIED BLOCK (Applying the same logic here for consistency) ---
+    // 1. Stop recording and playback first.
+    await stopRecording();
+    await _voiceEngine?.stopPlayback();
+
+    // 2. Shut down and nullify the engine.
+    if (_voiceEngine?.isInitialized ?? false) {
+      if (Platform.isAndroid) {
+        await _voiceEngine?.shutdownAll();
+      } else {
+        await _voiceEngine?.shutdownBot();
+      }
+      _voiceEngine = null;
+    }
+    // --- END: MODIFIED BLOCK ---
 
     if (_cameraController != null) {
       await _cameraController?.stopImageStream();
@@ -198,6 +315,11 @@ class SessionCubit extends Cubit<SessionState> {
       return;
     }
 
+    if (state.mode != SessionMode.online) {
+      print('WebSocket connection ignored: not in online mode.');
+      return;
+    }
+
     print('Connecting to WebSocket...');
     _isConnecting = true;
     emit(state.copyWith(connecting: true, isError: false, error: null));
@@ -212,14 +334,17 @@ class SessionCubit extends Cubit<SessionState> {
           print('WebSocket disconnected.');
           _isWebSocketOpen = false;
           _isConnecting = false;
-          if (state.isSessionStarted) {
+          _imageSendTimer?.cancel();
+          _imageSendTimer = null;
+          if (state.mode == SessionMode.online) {
             emit(
               state.copyWith(
-                isSessionStarted: false,
+                mode: SessionMode.idle,
                 isRecording: false,
                 isError: true,
-                error: 'WebSocket disconnected. Ending session.',
+                error: 'WebSocket disconnected. Returning to idle mode.',
                 connecting: false,
+                isStreamingImages: false,
               ),
             );
           }
@@ -229,12 +354,15 @@ class SessionCubit extends Cubit<SessionState> {
           print('WebSocket error: $error\n$stackTrace');
           _isWebSocketOpen = false;
           _isConnecting = false;
+          _imageSendTimer?.cancel();
+          _imageSendTimer = null;
           emit(
             state.copyWith(
               isError: true,
               error: 'WebSocket error: $error',
-              isSessionStarted: false,
+              mode: SessionMode.idle,
               connecting: false,
+              isStreamingImages: false,
             ),
           );
           _stopAllStreams();
@@ -248,6 +376,7 @@ class SessionCubit extends Cubit<SessionState> {
         state.copyWith(
           error: 'WebSocket connection failed: $e',
           isError: true,
+          mode: SessionMode.idle,
           connecting: false,
         ),
       );
@@ -268,9 +397,20 @@ class SessionCubit extends Cubit<SessionState> {
             print('Gemini session established! Starting audio...');
             _isConnecting = false;
             await startRecording();
-            print('Audio ready, initializing camera...');
-            await _initCamera();
-            emit(state.copyWith(isSessionStarted: true, connecting: false));
+            print('Audio ready, initializing image streaming...');
+
+            // Ensure camera is streaming before starting image timer
+            await _ensureCameraStreamingForOnlineMode();
+            _startImageSendTimer(); // Start sending images from existing camera
+
+            emit(
+              state.copyWith(
+                mode: SessionMode.online,
+                isSessionStarted: true,
+                connecting: false,
+                isStreamingImages: true,
+              ),
+            );
             break;
           case 'error':
             final errorMsg = data['message'] as String? ?? 'Unknown error';
@@ -343,32 +483,38 @@ class SessionCubit extends Cubit<SessionState> {
   }
 
   Future<void> _initCamera() async {
-    print('Initializing Camera');
+    print('Initializing Camera for idle mode (nv21 format)');
+    await _initCameraWithFormat(ImageFormatGroup.nv21);
+  }
+
+  Future<void> _initCameraForOnlineMode() async {
+    print('Initializing Camera for online mode (yuv420 format for WebSocket)');
+    await _initCameraWithFormat(
+      Platform.isAndroid ? ImageFormatGroup.yuv420 : ImageFormatGroup.bgra8888,
+    );
+  }
+
+  Future<void> _initCameraForOfflineMode() async {
+    print('Initializing Camera for offline mode (nv21 format for MLKit)');
+    await _initCameraWithFormat(
+      Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888,
+    );
+  }
+
+  Future<void> _initCameraWithFormat(ImageFormatGroup format) async {
+    print('Initializing Camera with format: $format');
     emit(
       state.copyWith(isInitializingCamera: true, error: null, isError: false),
     );
     try {
-      if (_cameraController != null && _cameraController!.value.isInitialized) {
-        print('Camera already initialized, reusing.');
-        emit(
-          state.copyWith(
-            isInitializingCamera: false,
-            isCameraActive: true,
-            showCameraPreview: true,
-            isStreamingImages: true,
-          ),
-        );
-        if (!_cameraController!.value.isStreamingImages) {
-          await _cameraController!.startImageStream(
-            (image) => _latestCameraImage = image,
-          );
+      // Always dispose and reinitialize to ensure correct format
+      if (_cameraController != null) {
+        if (_cameraController!.value.isStreamingImages) {
+          await _cameraController!.stopImageStream();
         }
-        _startImageSendTimer();
-        return;
+        await _cameraController?.dispose();
+        _cameraController = null;
       }
-
-      await _cameraController?.dispose();
-      _cameraController = null;
 
       _cameras = await availableCameras();
       if (_cameras.isEmpty) {
@@ -380,19 +526,15 @@ class SessionCubit extends Cubit<SessionState> {
         orElse: () => _cameras.first,
       );
 
-      ImageFormatGroup desiredFormat = Platform.isAndroid
-          ? ImageFormatGroup.yuv420
-          : ImageFormatGroup.bgra8888;
-
       _cameraController = CameraController(
         camera,
         ResolutionPreset.medium,
         enableAudio: false,
-        imageFormatGroup: desiredFormat,
+        imageFormatGroup: format,
       );
 
       await _cameraController!.initialize();
-      print('Camera initialized. Starting image stream...');
+      print('Camera initialized with format $format. Starting image stream...');
 
       await _cameraController!.startImageStream((CameraImage image) {
         _latestCameraImage = image;
@@ -403,11 +545,8 @@ class SessionCubit extends Cubit<SessionState> {
           isInitializingCamera: false,
           isCameraActive: true,
           showCameraPreview: true,
-          isStreamingImages: true,
         ),
       );
-
-      _startImageSendTimer();
     } catch (e, stackTrace) {
       print('Camera initialization failed: $e\n$stackTrace');
       emit(
@@ -425,8 +564,17 @@ class SessionCubit extends Cubit<SessionState> {
     }
   }
 
+  Future<void> _ensureCameraStreamingForOnlineMode() async {
+    print('Ensuring camera is streaming for online mode...');
+
+    // Always reinitialize camera for online mode to ensure yuv420 format
+    print('Reinitializing camera with yuv420 format for online mode...');
+    await _initCameraForOnlineMode();
+  }
+
   void _startImageSendTimer() {
     _imageSendTimer?.cancel();
+    print('Starting image send timer...');
     _imageSendTimer = Timer.periodic(const Duration(milliseconds: 1000), (
       timer,
     ) async {
@@ -434,6 +582,7 @@ class SessionCubit extends Cubit<SessionState> {
           _webSocket != null &&
           _isWebSocketOpen) {
         try {
+          print('Sending image to WebSocket...');
           final Uint8List? jpegBytes = await compute(
             convertCameraImageToJpeg,
             _latestCameraImage!,
@@ -447,16 +596,24 @@ class SessionCubit extends Cubit<SessionState> {
               "mime_type": "image/jpeg",
             };
             _webSocket!.sink.add(jsonEncode(imageMessage));
+            print('Image sent successfully (${jpegBytes.length} bytes)');
+          } else {
+            print('Failed to convert camera image to JPEG');
           }
         } catch (e, stackTrace) {
           print("Error processing/sending timed picture: $e\n$stackTrace");
         }
-      } else if (_cameraController == null ||
-          !_cameraController!.value.isInitialized) {
-        print("Camera not active for timed image send. Stopping timer.");
-        timer.cancel();
-        _imageSendTimer = null;
-        emit(state.copyWith(isStreamingImages: false));
+      } else {
+        print(
+          'Cannot send image: latestCameraImage=${_latestCameraImage != null}, webSocket=${_webSocket != null}, webSocketOpen=$_isWebSocketOpen',
+        );
+        if (_cameraController == null ||
+            !_cameraController!.value.isInitialized) {
+          print("Camera not active for timed image send. Stopping timer.");
+          timer.cancel();
+          _imageSendTimer = null;
+          emit(state.copyWith(isStreamingImages: false));
+        }
       }
     });
   }
@@ -489,9 +646,19 @@ class SessionCubit extends Cubit<SessionState> {
       _cameraController = null;
       _latestCameraImage = null;
 
-      ImageFormatGroup desiredFormat = Platform.isAndroid
-          ? ImageFormatGroup.yuv420
-          : ImageFormatGroup.bgra8888;
+      // Choose format based on current mode
+      ImageFormatGroup desiredFormat;
+      if (state.mode == SessionMode.online) {
+        // Online mode uses yuv420 for WebSocket compatibility
+        desiredFormat = Platform.isAndroid
+            ? ImageFormatGroup.yuv420
+            : ImageFormatGroup.bgra8888;
+      } else {
+        // Idle and offline modes use nv21 for MLKit compatibility
+        desiredFormat = Platform.isAndroid
+            ? ImageFormatGroup.nv21
+            : ImageFormatGroup.bgra8888;
+      }
 
       _cameraController = CameraController(
         newCamera,
@@ -544,29 +711,34 @@ class SessionCubit extends Cubit<SessionState> {
 
       _voiceEngineSubscription?.cancel();
       _voiceEngineSubscription = _voiceEngine!.audioChunkStream.listen(
-              (audioData) {
-            // This is the most important print statement
-            print("--- AUDIO CHUNK RECEIVED! Length: ${audioData.length}, isRecording state: ${state.isRecording} ---"); // <-- ADD THIS
+        (audioData) {
+          // This is the most important print statement
+          print(
+            "--- AUDIO CHUNK RECEIVED! Length: ${audioData.length}, isRecording state: ${state.isRecording} ---",
+          ); // <-- ADD THIS
 
-            if (_webSocket != null && _isWebSocketOpen && state.isRecording) {
-              _webSocket!.sink.add(audioData);
-            }
-            final amplitude = computeRMSAmplitude(audioData);
-            emit(state.copyWith(visualizerAmplitude: amplitude));
-          },
-          onError: (error, stackTrace) {
-            print('!!! Recording stream ERROR: $error\n$stackTrace'); // <-- ADD THIS
-            emit(state.copyWith(error: 'Recording error: $error', isError: true));
-          },
-          onDone: () {
-            print("--- Recording stream is DONE. ---"); // <-- ADD THIS
+          if (_webSocket != null && _isWebSocketOpen && state.isRecording) {
+            _webSocket!.sink.add(audioData);
           }
+          final amplitude = computeRMSAmplitude(audioData);
+          emit(state.copyWith(visualizerAmplitude: amplitude));
+        },
+        onError: (error, stackTrace) {
+          print(
+            '!!! Recording stream ERROR: $error\n$stackTrace',
+          ); // <-- ADD THIS
+          emit(state.copyWith(error: 'Recording error: $error', isError: true));
+        },
+        onDone: () {
+          print("--- Recording stream is DONE. ---"); // <-- ADD THIS
+        },
       );
 
       print("Now calling _voiceEngine.startRecording()..."); // <-- ADD THIS
       await _voiceEngine!.startRecording();
-      print("--- Call to _voiceEngine.startRecording() is COMPLETE. ---"); // <-- ADD THIS
-
+      print(
+        "--- Call to _voiceEngine.startRecording() is COMPLETE. ---",
+      ); // <-- ADD THIS
     } catch (e, stackTrace) {
       print('!!! FAILED to start recording: $e\n$stackTrace'); // <-- ADD THIS
       emit(
@@ -683,6 +855,11 @@ class SessionCubit extends Cubit<SessionState> {
     }
     final requestStatus = await Permission.microphone.request();
     return requestStatus.isGranted;
+  }
+
+  // New method to get current camera image for offline analysis
+  CameraImage? getCurrentCameraImage() {
+    return _latestCameraImage;
   }
 
   void updateWebSocketUrl(String url) {
