@@ -211,26 +211,14 @@ class SessionCubit extends Cubit<SessionState> {
     _imageSendTimer?.cancel();
     _imageSendTimer = null;
 
-    // --- START: MODIFIED BLOCK ---
-    // 1. Stop recording and playback FIRST, while the engine object still exists.
+    // Stop recording and playback, but keep the voice engine alive
     await stopRecording();
     await _voiceEngine?.stopPlayback();
 
-    // 2. NOW, it is safe to shut down and nullify the engine.
-    if (_voiceEngine?.isInitialized ?? false) {
-      if (Platform.isAndroid) {
-        await _voiceEngine?.shutdownAll();
-      } else {
-        await _voiceEngine?.shutdownBot();
-      }
-      _voiceEngine = null; // Nullify the instance to force re-initialization
-    }
-
-    // 3. Finally, close the WebSocket connection.
+    // Close the WebSocket connection
     _webSocket?.sink.close();
     _isWebSocketOpen = false;
     _isConnecting = false;
-    // --- END: MODIFIED BLOCK ---
   }
 
   Future<void> _stopOfflineMode() async {
@@ -244,12 +232,11 @@ class SessionCubit extends Cubit<SessionState> {
     _imageSendTimer = null;
     _latestCameraImage = null;
 
-    // --- START: MODIFIED BLOCK (Applying the same logic here for consistency) ---
-    // 1. Stop recording and playback first.
+    // Stop recording and playback
     await stopRecording();
     await _voiceEngine?.stopPlayback();
 
-    // 2. Shut down and nullify the engine.
+    // Only shutdown the voice engine on complete session stop
     if (_voiceEngine?.isInitialized ?? false) {
       if (Platform.isAndroid) {
         await _voiceEngine?.shutdownAll();
@@ -258,7 +245,6 @@ class SessionCubit extends Cubit<SessionState> {
       }
       _voiceEngine = null;
     }
-    // --- END: MODIFIED BLOCK ---
 
     if (_cameraController != null) {
       await _cameraController?.stopImageStream();
