@@ -85,10 +85,8 @@ class SessionState {
 
 class SessionCubit extends Cubit<SessionState> {
   SessionCubit() : super(SessionState()) {
-    final apiKey =
-        dotenv.env['GEMINI_API_KEY'] ??
-        'AIzaSyB5DfDqOV-V8GkvTi4JL_tgExmly0QaqbU';
-    _genAI = GoogleGenAI(apiKey: apiKey);
+    final apiKey = dotenv.env['GEMINI_API_KEY'];
+    _genAI = GoogleGenAI(apiKey: apiKey!);
     print('Initialized Gemini AI with API key: ${apiKey.substring(0, 10)}...');
   }
 

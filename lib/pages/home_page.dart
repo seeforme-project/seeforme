@@ -1,4 +1,3 @@
-// lib/pages/home_page.dart
 import 'package:flutter/material.dart';
 import 'package:seeforme/meeting_screen.dart';
 import 'package:seeforme/pages/profile_page.dart';

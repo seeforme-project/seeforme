@@ -1,14 +1,11 @@
-// lib/main.dart
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:seeforme/pages/welcome_page.dart'; // Make sure this path is correct
+import 'package:seeforme/pages/welcome_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  // This is needed for the VideoSDK API key
   await dotenv.load(fileName: ".env");
   runApp(const SeeForMeApp());
 }
