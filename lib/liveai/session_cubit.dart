@@ -6,9 +6,10 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_voice_engine/flutter_voice_engine.dart';
-import 'package:web_socket_channel/io.dart';
 import 'package:image/image.dart' as imglib;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:gemini_live/gemini_live.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // Enum for different interaction modes
 enum SessionMode {
@@ -82,21 +83,25 @@ class SessionState {
   }
 }
 
-String WEBSOCKET_URL = "ws://10.105.65.63:8000/ws/live";
-
 class SessionCubit extends Cubit<SessionState> {
-  SessionCubit() : super(SessionState());
+  SessionCubit() : super(SessionState()) {
+    final apiKey =
+        dotenv.env['GEMINI_API_KEY'] ??
+        'AIzaSyB5DfDqOV-V8GkvTi4JL_tgExmly0QaqbU';
+    _genAI = GoogleGenAI(apiKey: apiKey);
+    print('Initialized Gemini AI with API key: ${apiKey.substring(0, 10)}...');
+  }
 
   FlutterVoiceEngine? _voiceEngine;
-  IOWebSocketChannel? _webSocket;
+  late final GoogleGenAI _genAI;
+  LiveSession? _geminiSession;
   CameraController? _cameraController;
   List<CameraDescription> _cameras = [];
   CameraImage? _latestCameraImage;
   StreamSubscription<dynamic>? _voiceEngineSubscription;
   Timer? _imageSendTimer;
 
-  bool _isInitialized = false;
-  bool _isWebSocketOpen = false;
+  bool _isGeminiConnected = false;
   bool _isConnecting = false; // Flag to prevent connection spam
 
   CameraController? get cameraController => _cameraController;
@@ -141,14 +146,14 @@ class SessionCubit extends Cubit<SessionState> {
   Future<void> startOnlineMode() async {
     if (state.mode != SessionMode.idle) return;
 
-    print('Starting online mode');
+    print('Starting online mode with Gemini Live API');
     emit(state.copyWith(mode: SessionMode.online, connecting: true));
 
     try {
-      // Reinitialize camera with yuv420 format for WebSocket compatibility
+      // Reinitialize camera with yuv420 format for Gemini Live compatibility
       await _initCameraForOnlineMode();
       await _initVoiceEngine();
-      connectWebSocket();
+      await _connectToGeminiLive();
     } catch (e, stackTrace) {
       print('Online mode initialization failed: $e\n$stackTrace');
       emit(
@@ -210,14 +215,16 @@ class SessionCubit extends Cubit<SessionState> {
     print('Stopping online mode');
     _imageSendTimer?.cancel();
     _imageSendTimer = null;
+    _playbackStopTimer?.cancel();
+    _playbackStopTimer = null;
 
     // Stop recording and playback, but keep the voice engine alive
     await stopRecording();
     await _voiceEngine?.stopPlayback();
 
-    // Close the WebSocket connection
-    _webSocket?.sink.close();
-    _isWebSocketOpen = false;
+    // Close the Gemini Live session
+    await _geminiSession?.close();
+    _isGeminiConnected = false;
     _isConnecting = false;
   }
 
@@ -230,6 +237,8 @@ class SessionCubit extends Cubit<SessionState> {
     print('Stopping session');
     _imageSendTimer?.cancel();
     _imageSendTimer = null;
+    _playbackStopTimer?.cancel();
+    _playbackStopTimer = null;
     _latestCameraImage = null;
 
     // Stop recording and playback
@@ -252,10 +261,9 @@ class SessionCubit extends Cubit<SessionState> {
       _cameraController = null;
     }
 
-    _webSocket?.sink.close();
-    _isWebSocketOpen = false;
+    await _geminiSession?.close();
+    _isGeminiConnected = false;
     _isConnecting = false;
-    _isInitialized = false;
 
     emit(SessionState()); // Reset to the initial state
   }
@@ -293,74 +301,119 @@ class SessionCubit extends Cubit<SessionState> {
     }
   }
 
-  void connectWebSocket() {
-    if (_isConnecting || _isWebSocketOpen) {
+  Future<void> _connectToGeminiLive() async {
+    if (_isConnecting || _isGeminiConnected) {
       print(
-        'WebSocket connection attempt ignored: already connecting or connected.',
+        'Gemini Live connection attempt ignored: already connecting or connected.',
       );
       return;
     }
 
     if (state.mode != SessionMode.online) {
-      print('WebSocket connection ignored: not in online mode.');
+      print('Gemini Live connection ignored: not in online mode.');
       return;
     }
 
-    print('Connecting to WebSocket...');
+    print('Connecting to Gemini Live API...');
+    print('Using model: gemini-2.0-flash-live-001');
+    print('Response modalities: [AUDIO]');
     _isConnecting = true;
     emit(state.copyWith(connecting: true, isError: false, error: null));
 
     try {
-      _webSocket = IOWebSocketChannel.connect(Uri.parse(WEBSOCKET_URL));
-      _isWebSocketOpen = true;
-
-      _webSocket!.stream.listen(
-        (message) => _handleWebSocketMessage(message),
-        onDone: () {
-          print('WebSocket disconnected.');
-          _isWebSocketOpen = false;
-          _isConnecting = false;
-          _imageSendTimer?.cancel();
-          _imageSendTimer = null;
-          if (state.mode == SessionMode.online) {
-            emit(
-              state.copyWith(
-                mode: SessionMode.idle,
-                isRecording: false,
-                isError: true,
-                error: 'WebSocket disconnected. Returning to idle mode.',
-                connecting: false,
-                isStreamingImages: false,
+      final session = await _genAI.live.connect(
+        LiveConnectParameters(
+          model: 'gemini-2.0-flash-live-001',
+          config: GenerationConfig(
+            responseModalities: [Modality.AUDIO], // We want audio responses
+            temperature: 0.8,
+            topK: 40,
+            topP: 0.95,
+          ),
+          systemInstruction: Content(
+            parts: [
+              Part(
+                text:
+                    "You are an AI assistant for visually impaired users. "
+                    "Describe what you see in the camera images clearly and concisely. "
+                    "Provide helpful information about the environment, objects, text, and people. "
+                    "Keep responses brief but informative. "
+                    "If you see text, read it aloud. "
+                    "If you see people, describe what they're doing. "
+                    "Be helpful and encouraging. "
+                    "Wait for the user to finish speaking before responding. "
+                    "Do not respond continuously - wait for new input.",
               ),
-            );
-          }
-          _stopAllStreams();
-        },
-        onError: (error, stackTrace) {
-          print('WebSocket error: $error\n$stackTrace');
-          _isWebSocketOpen = false;
-          _isConnecting = false;
-          _imageSendTimer?.cancel();
-          _imageSendTimer = null;
-          emit(
-            state.copyWith(
-              isError: true,
-              error: 'WebSocket error: $error',
-              mode: SessionMode.idle,
-              connecting: false,
-              isStreamingImages: false,
-            ),
-          );
-          _stopAllStreams();
-        },
+            ],
+          ),
+          callbacks: LiveCallbacks(
+            onOpen: () {
+              print('Gemini Live session opened successfully');
+              _isGeminiConnected = true;
+              _isConnecting = false;
+              _startRecordingAndImageStreaming();
+            },
+            onMessage: _handleGeminiLiveMessage,
+            onError: (error, stack) {
+              print('Gemini Live error: $error');
+              print('Stack trace: $stack');
+              _isGeminiConnected = false;
+              _isConnecting = false;
+              _imageSendTimer?.cancel();
+              _imageSendTimer = null;
+
+              String errorMessage = 'Gemini Live error: $error';
+              if (error.toString().contains('1007')) {
+                errorMessage =
+                    'API key invalid or insufficient permissions. Please check your Gemini API key.';
+              } else if (error.toString().contains('precondition')) {
+                errorMessage =
+                    'Connection precondition failed. Please check API key and model access.';
+              }
+
+              emit(
+                state.copyWith(
+                  isError: true,
+                  error: errorMessage,
+                  mode: SessionMode.idle,
+                  connecting: false,
+                  isStreamingImages: false,
+                ),
+              );
+              _stopAllStreams();
+            },
+            onClose: (code, reason) {
+              print('Gemini Live disconnected: $code, $reason');
+              _isGeminiConnected = false;
+              _isConnecting = false;
+              _imageSendTimer?.cancel();
+              _imageSendTimer = null;
+              if (state.mode == SessionMode.online) {
+                emit(
+                  state.copyWith(
+                    mode: SessionMode.idle,
+                    isRecording: false,
+                    isError: true,
+                    error: 'Gemini Live disconnected. Returning to idle mode.',
+                    connecting: false,
+                    isStreamingImages: false,
+                  ),
+                );
+              }
+              _stopAllStreams();
+            },
+          ),
+        ),
       );
-      print('WebSocket connection attempt successful.');
+
+      _geminiSession = session;
+      print('Gemini Live connection attempt successful.');
     } catch (e, stackTrace) {
-      print('WebSocket connection failed: $e\n$stackTrace');
+      print('Gemini Live connection failed: $e\n$stackTrace');
       _isConnecting = false;
       emit(
         state.copyWith(
-          error: 'WebSocket connection failed: $e',
+          error: 'Gemini Live connection failed: $e',
           isError: true,
           mode: SessionMode.idle,
           connecting: false,
@@ -369,87 +422,116 @@ class SessionCubit extends Cubit<SessionState> {
     }
   }
 
-  Future<void> _handleWebSocketMessage(dynamic message) async {
+  Future<void> _startRecordingAndImageStreaming() async {
+    print('Starting recording and image streaming...');
+
+    // Add a small delay to ensure connection is fully established
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    await startRecording();
+    print('Audio ready, initializing image streaming...');
+
+    // Ensure camera is streaming before starting image timer
+    await _ensureCameraStreamingForOnlineMode();
+
+    // Add another delay before starting image streaming
+    await Future.delayed(const Duration(milliseconds: 1000));
+    _startImageSendTimer(); // Start sending images from existing camera
+
+    emit(
+      state.copyWith(
+        mode: SessionMode.online,
+        isSessionStarted: true,
+        connecting: false,
+        isStreamingImages: true,
+      ),
+    );
+  }
+
+  void _handleGeminiLiveMessage(LiveServerMessage message) {
     try {
-      if (message is String) {
-        final data = jsonDecode(message);
-        final type = data['type'] as String;
-        switch (type) {
-          case 'instantiating_connection':
-            print('Gemini session is being set up...');
-            emit(state.copyWith(connecting: true));
-            break;
-          case 'successfully_connected':
-            print('Gemini session established! Starting audio...');
-            _isConnecting = false;
-            await startRecording();
-            print('Audio ready, initializing image streaming...');
+      print('Received Gemini Live message');
 
-            // Ensure camera is streaming before starting image timer
-            await _ensureCameraStreamingForOnlineMode();
-            _startImageSendTimer(); // Start sending images from existing camera
+      // Handle text responses (though we're primarily using audio)
+      if (message.text != null) {
+        print('Received text: ${message.text}');
+      }
 
+      // Handle audio responses - Audio comes through realtimeInput or modelTurn parts
+      if (message.serverContent?.modelTurn?.parts != null) {
+        for (final part in message.serverContent!.modelTurn!.parts!) {
+          if (part.inlineData != null &&
+              part.inlineData!.mimeType.startsWith('audio/')) {
+            print(
+              'Received audio data: ${part.inlineData!.data.length} chars (base64)',
+            );
+
+            // Decode base64 audio data
+            final audioData = base64Decode(part.inlineData!.data);
+            final amplitude = computeRMSAmplitude(audioData);
             emit(
               state.copyWith(
-                mode: SessionMode.online,
-                isSessionStarted: true,
-                connecting: false,
-                isStreamingImages: true,
+                isBotSpeaking: true,
+                visualizerAmplitude: amplitude,
               ),
             );
-            break;
-          case 'error':
-            final errorMsg = data['message'] as String? ?? 'Unknown error';
-            print('Backend error: $errorMsg');
-            _isConnecting = false;
-            emit(
-              state.copyWith(error: errorMsg, isError: true, connecting: false),
-            );
-            _stopAllStreams();
-            break;
-          case 'turn_complete':
-            print('TURN COMPLETE received');
-            await _voiceEngine!.stopPlayback();
-            emit(state.copyWith(isBotSpeaking: false));
-            break;
-          case 'interrupted':
-            print('INTERRUPTED received');
-            await _voiceEngine!.stopPlayback();
-            emit(state.copyWith(isBotSpeaking: false));
-            break;
-          default:
-            print('Unhandled message type: $type');
-        }
-      } else {
-        final Uint8List audioData = message as Uint8List;
-        final amplitude = computeRMSAmplitude(audioData);
-        emit(
-          state.copyWith(isBotSpeaking: true, visualizerAmplitude: amplitude),
-        );
-        try {
-          // Amplify audio data by a factor (e.g., 2x) //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-          final Uint8List amplifiedAudio = _amplifyAudio(
-            audioData,
-            amplificationFactor: 12.0,
-          );
-          await _voiceEngine!.playAudioChunk(amplifiedAudio);
-          // ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-          // await _voiceEngine!.playAudioChunk(audioData);
-        } catch (e, stackTrace) {
-          print('Playback error: $e\n$stackTrace');
-          emit(state.copyWith(error: 'Playback error: $e', isError: true));
+            try {
+              // Amplify audio data by a factor
+              final Uint8List amplifiedAudio = _amplifyAudio(
+                audioData,
+                amplificationFactor: 12.0,
+              );
+              _voiceEngine?.playAudioChunk(amplifiedAudio);
+            } catch (e, stackTrace) {
+              print('Playback error: $e\n$stackTrace');
+              emit(state.copyWith(error: 'Playback error: $e', isError: true));
+            }
+          }
         }
       }
+
+      // When the model's turn is complete, add delay before stopping playback
+      if (message.serverContent?.turnComplete ?? false) {
+        print('Gemini turn complete - scheduling playback stop with delay');
+        _schedulePlaybackStop();
+      }
+
+      // Handle generation complete
+      if (message.serverContent?.generationComplete ?? false) {
+        print(
+          'Gemini generation complete - scheduling playback stop with delay',
+        );
+        _schedulePlaybackStop();
+      }
     } catch (e, stackTrace) {
-      print('WebSocket message error: $e\n$stackTrace');
-      emit(state.copyWith(error: 'WebSocket message error: $e', isError: true));
+      print('Gemini Live message error: $e\n$stackTrace');
+      emit(
+        state.copyWith(error: 'Gemini Live message error: $e', isError: true),
+      );
     }
+  }
+
+  Timer? _playbackStopTimer;
+
+  void _schedulePlaybackStop() {
+    // Cancel any existing timer
+    _playbackStopTimer?.cancel();
+
+    // Schedule playback stop with a delay to ensure all audio is played
+    _playbackStopTimer = Timer(const Duration(milliseconds: 1000), () {
+      print('Stopping playback after delay');
+      _voiceEngine?.stopPlayback();
+      emit(state.copyWith(isBotSpeaking: false, visualizerAmplitude: 0.0));
+      _playbackStopTimer = null;
+    });
   }
 
   Future<void> _stopAllStreams() async {
     _imageSendTimer?.cancel();
     _imageSendTimer = null;
+    _playbackStopTimer?.cancel();
+    _playbackStopTimer = null;
     _latestCameraImage = null;
     await stopRecording();
     if (_cameraController != null &&
@@ -561,14 +643,15 @@ class SessionCubit extends Cubit<SessionState> {
   void _startImageSendTimer() {
     _imageSendTimer?.cancel();
     print('Starting image send timer...');
-    _imageSendTimer = Timer.periodic(const Duration(milliseconds: 1000), (
+    _imageSendTimer = Timer.periodic(const Duration(milliseconds: 3000), (
+      // Reduced frequency to 3 seconds
       timer,
     ) async {
       if (_latestCameraImage != null &&
-          _webSocket != null &&
-          _isWebSocketOpen) {
+          _geminiSession != null &&
+          _isGeminiConnected) {
         try {
-          print('Sending image to WebSocket...');
+          print('Sending image to Gemini Live...');
           final Uint8List? jpegBytes = await compute(
             convertCameraImageToJpeg,
             _latestCameraImage!,
@@ -576,12 +659,15 @@ class SessionCubit extends Cubit<SessionState> {
 
           if (jpegBytes != null) {
             final String base64Image = base64Encode(jpegBytes);
-            final Map<String, dynamic> imageMessage = {
-              "type": "image_input",
-              "image_data": base64Image,
-              "mime_type": "image/jpeg",
-            };
-            _webSocket!.sink.add(jsonEncode(imageMessage));
+
+            // Send image using realtimeInput like in Python server (not clientContent)
+            _geminiSession!.sendMessage(
+              LiveClientMessage(
+                realtimeInput: LiveClientRealtimeInput(
+                  video: Blob(mimeType: 'image/jpeg', data: base64Image),
+                ),
+              ),
+            );
             print('Image sent successfully (${jpegBytes.length} bytes)');
           } else {
             print('Failed to convert camera image to JPEG');
@@ -591,7 +677,7 @@ class SessionCubit extends Cubit<SessionState> {
         }
       } else {
         print(
-          'Cannot send image: latestCameraImage=${_latestCameraImage != null}, webSocket=${_webSocket != null}, webSocketOpen=$_isWebSocketOpen',
+          'Cannot send image: latestCameraImage=${_latestCameraImage != null}, geminiSession=${_geminiSession != null}, geminiConnected=$_isGeminiConnected',
         );
         if (_cameraController == null ||
             !_cameraController!.value.isInitialized) {
@@ -685,48 +771,55 @@ class SessionCubit extends Cubit<SessionState> {
   // Add these print statements to your startRecording() function
 
   Future<void> startRecording() async {
-    print("--- START RECORDING CALLED ---"); // <-- ADD THIS
+    print("--- START RECORDING CALLED ---");
     try {
       if (!(_voiceEngine?.isInitialized ?? false)) {
-        print("Voice engine not ready, initializing..."); // <-- ADD THIS
+        print("Voice engine not ready, initializing...");
         await _initVoiceEngine();
       }
 
       emit(state.copyWith(isRecording: true));
-      print("--- STATE EMITTED: isRecording is now true ---"); // <-- ADD THIS
+      print("--- STATE EMITTED: isRecording is now true ---");
 
       _voiceEngineSubscription?.cancel();
       _voiceEngineSubscription = _voiceEngine!.audioChunkStream.listen(
         (audioData) {
-          // This is the most important print statement
           print(
             "--- AUDIO CHUNK RECEIVED! Length: ${audioData.length}, isRecording state: ${state.isRecording} ---",
-          ); // <-- ADD THIS
+          );
 
-          if (_webSocket != null && _isWebSocketOpen && state.isRecording) {
-            _webSocket!.sink.add(audioData);
+          if (_geminiSession != null &&
+              _isGeminiConnected &&
+              state.isRecording) {
+            // Send audio directly to Gemini Live using realtimeInput like in Python server
+            _geminiSession!.sendMessage(
+              LiveClientMessage(
+                realtimeInput: LiveClientRealtimeInput(
+                  audio: Blob(
+                    mimeType: 'audio/pcm;rate=16000',
+                    data: base64Encode(audioData),
+                  ),
+                ),
+              ),
+            );
           }
           final amplitude = computeRMSAmplitude(audioData);
           emit(state.copyWith(visualizerAmplitude: amplitude));
         },
         onError: (error, stackTrace) {
-          print(
-            '!!! Recording stream ERROR: $error\n$stackTrace',
-          ); // <-- ADD THIS
+          print('!!! Recording stream ERROR: $error\n$stackTrace');
           emit(state.copyWith(error: 'Recording error: $error', isError: true));
         },
         onDone: () {
-          print("--- Recording stream is DONE. ---"); // <-- ADD THIS
+          print("--- Recording stream is DONE. ---");
         },
       );
 
-      print("Now calling _voiceEngine.startRecording()..."); // <-- ADD THIS
+      print("Now calling _voiceEngine.startRecording()...");
       await _voiceEngine!.startRecording();
-      print(
-        "--- Call to _voiceEngine.startRecording() is COMPLETE. ---",
-      ); // <-- ADD THIS
+      print("--- Call to _voiceEngine.startRecording() is COMPLETE. ---");
     } catch (e, stackTrace) {
-      print('!!! FAILED to start recording: $e\n$stackTrace'); // <-- ADD THIS
+      print('!!! FAILED to start recording: $e\n$stackTrace');
       emit(
         state.copyWith(error: 'Failed to start recording: $e', isError: true),
       );
@@ -740,9 +833,6 @@ class SessionCubit extends Cubit<SessionState> {
       _voiceEngineSubscription = null;
       if (_voiceEngine?.isRecording ?? false) {
         await _voiceEngine!.stopRecording();
-      }
-      if (_webSocket != null && _isWebSocketOpen) {
-        _webSocket!.sink.add(jsonEncode({"type": "audio_stream_end"}));
       }
       emit(state.copyWith(isRecording: false));
     } catch (e, stackTrace) {
@@ -848,18 +938,40 @@ class SessionCubit extends Cubit<SessionState> {
     return _latestCameraImage;
   }
 
-  void updateWebSocketUrl(String url) {
-    if (url.isEmpty || url == WEBSOCKET_URL) return;
-    WEBSOCKET_URL = url;
-    print('WebSocket URL updated to: $WEBSOCKET_URL');
+  // Method to test API key validity
+  Future<bool> testApiKey() async {
     try {
-      _webSocket?.sink.close();
-    } catch (_) {}
-    _isWebSocketOpen = false;
-    _isConnecting = false;
-    if (state.isSessionStarted || _isInitialized) {
-      connectWebSocket();
+      print('Testing API key validity...');
+      final testSession = await _genAI.live.connect(
+        LiveConnectParameters(
+          model: 'gemini-2.0-flash-live-001',
+          config: GenerationConfig(
+            responseModalities: [Modality.TEXT], // Use text for quick test
+          ),
+          callbacks: LiveCallbacks(
+            onOpen: () => print('API key test: Connection successful'),
+            onMessage: (message) => print('API key test: Received message'),
+            onError: (error, stack) => print('API key test: Error - $error'),
+            onClose: (code, reason) =>
+                print('API key test: Closed - $code, $reason'),
+          ),
+        ),
+      );
+      await testSession.close();
+      print('API key test: SUCCESS');
+      return true;
+    } catch (e) {
+      print('API key test: FAILED - $e');
+      return false;
     }
+  }
+
+  // Method to update the Gemini API key if needed
+  void updateGeminiApiKey(String apiKey) {
+    if (apiKey.isEmpty) return;
+    // Note: This would require reinitializing the GoogleGenAI instance
+    // For simplicity, we'll just log this - in practice you'd want to restart the session
+    print('API key update requested - session restart required');
   }
 }
 

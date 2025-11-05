@@ -35,6 +35,9 @@ dependencies:
   # voice engine for real-time audio processing
   flutter_voice_engine: ^0.0.1 # Adnan's custom package on his git repo)
 
+  # Gemini Live API for direct connection
+  gemini_live: ^0.1.1
+
   google_fonts: ^6.2.1
   
   # MLKit for offline AI functionality

@@ -19,7 +19,6 @@ class SessionPage extends StatefulWidget {
 
 class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
   bool _showDebug = false;
-  late TextEditingController _wsController;
 
   // Services
   final _firebaseService = FirebaseService();
@@ -33,12 +32,11 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    _wsController = TextEditingController(text: WEBSOCKET_URL);
 
     // Initialize MLKit service
     _mlkitService.initialize();
 
-    // Start session in idle mode (camera preview only, no WebSocket)
+    // Start session in idle mode (camera preview only, no API connection)
     context.read<SessionCubit>().startSession();
   }
 
@@ -92,7 +90,6 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    _wsController.dispose();
     context.read<SessionCubit>().stopSession();
     _callSubscription?.cancel();
     _tapTimer?.cancel();
@@ -463,37 +460,13 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _wsController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'WebSocket URL:port',
-                    labelStyle: const TextStyle(color: Colors.white54),
-                    hintText: 'ws://host:port/ws/live',
-                    hintStyle: const TextStyle(color: Colors.white24),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Colors.white24),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Colors.blueAccent),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    suffixIcon: IconButton(
-                      icon: const Icon(
-                        Icons.send,
-                        color: Colors.lightGreenAccent,
-                      ),
-                      onPressed: () {
-                        cubit.updateWebSocketUrl(_wsController.text.trim());
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('WebSocket URL updated'),
-                          ),
-                        );
-                      },
-                    ),
+                const SizedBox(height: 20),
+                Text(
+                  'API Connection: Direct Gemini Live',
+                  style: TextStyle(
+                    color: Colors.lightGreenAccent,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -551,7 +524,7 @@ class _SessionPageState extends State<SessionPage> with WidgetsBindingObserver {
                 _statusLineString('Mode', state.mode.name),
                 _statusLine('Session', state.isSessionStarted),
                 _statusLine(
-                  'WebSocket',
+                  'Gemini Live API',
                   state.connecting
                       ? null
                       : (state.mode == SessionMode.online && !state.isError),
